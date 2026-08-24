@@ -6,6 +6,8 @@ import LoginScreen from '@/components/LoginScreen';
 import LegalTerms from '@/components/LegalTerms';
 import MainApp from '@/components/MainApp';
 import { Loader2, Activity } from 'lucide-react';
+// ✅ 新增這行：匯入 Supabase 連線實體
+import { supabase } from './supabaseClient';
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>('safety-check');
@@ -22,6 +24,19 @@ export default function App() {
   const [unreadChat, setUnreadChat] = useState(3);
   const [showPaywall, setShowPaywall] = useState(false);
   const [simulateBlocked, setSimulateBlocked] = useState(false);
+
+  // ✅ 新增這段：Supabase 連線心跳測試 (Health Check)
+  useEffect(() => {
+    const testConnection = async () => {
+      const { data, error } = await supabase.from('profiles').select('*');
+      if (error) {
+        console.error("❌ 連線失敗，請檢查金鑰或網路：", error.message);
+      } else {
+        console.log("✅ 資料庫連線成功！目前 Profiles 資料：", data);
+      }
+    };
+    testConnection();
+  }, []);
 
   // Simulate geo-check on mount
   useEffect(() => {

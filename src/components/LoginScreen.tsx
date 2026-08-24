@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Activity, Globe, Mail, ChevronDown, Loader2, X, MailCheck, ArrowLeft } from 'lucide-react';
 import { getLoginCopy } from '../i18n/loginTranslations';
+// ✅ 新增：匯入剛剛建立的 Supabase 連線實體
+import { supabase } from '../supabaseClient'; 
 
 const LANGUAGES = [
   { code: 'zh', label: '繁體中文', flag: '🇹🇼' },
@@ -27,15 +29,71 @@ export default function LoginScreen({ onLogin }: Props) {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  
+  // ✅ 新增：用來在畫面上顯示登入/註冊錯誤訊息的狀態
+  const [authError, setAuthError] = useState(''); 
 
-  function handleLogin(provider: string) {
+  // ✅ 改寫：整合真實的 Supabase 註冊與登入邏輯
+  async function handleLogin(provider: string) {
     setLoading(true);
     setLoadingProvider(provider);
-    setTimeout(() => {
-      setLoading(false);
-      setLoadingProvider(null);
-      onLogin();
-    }, 1200);
+    setAuthError(''); // 每次按下按鈕前，先清空舊的錯誤訊息
+
+    if (provider === 'email') {
+      // 1. 基本前端防呆
+      if (!email.trim() || !password.trim()) {
+        setAuthError('請輸入電子郵件與密碼');
+        setLoading(false);
+        setLoadingProvider(null);
+        return;
+      }
+
+      try {
+        // 2. 先嘗試「登入」
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) {
+          // 3. 若登入失敗 (通常是帳號不存在或密碼錯誤)，自動進入「註冊」流程來實現 UX
+          if (signInError.message.includes('Invalid login credentials')) {
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email,
+              password,
+            });
+
+            if (signUpError) {
+              setAuthError('註冊失敗：' + signUpError.message);
+            } else {
+              // Supabase 預設需要 Email 驗證，若 session 存在代表不需驗證，直接登入
+              if (signUpData.session) {
+                onLogin();
+              } else {
+                setAuthError('帳號建立成功！請前往您的信箱點選驗證連結，再回來登入。');
+              }
+            }
+          } else {
+            setAuthError('登入失敗：' + signInError.message);
+          }
+        } else {
+          // 4. 登入成功，呼叫上層元件切換畫面
+          onLogin();
+        }
+      } catch (err: any) {
+        setAuthError('系統發生錯誤：' + err.message);
+      } finally {
+        setLoading(false);
+        setLoadingProvider(null);
+      }
+    } else {
+      // OAuth (Google/LINE) 暫時維持假動作，未來可再接 Supabase OAuth
+      setTimeout(() => {
+        setLoading(false);
+        setLoadingProvider(null);
+        onLogin();
+      }, 1200);
+    }
   }
 
   function handleForgotPassword() {
@@ -176,6 +234,13 @@ export default function LoginScreen({ onLogin }: Props) {
                 {t.forgotPassword}
               </button>
             </div>
+            
+            {/* ✅ 新增：顯示錯誤訊息的區塊 */}
+            {authError && (
+              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center">
+                {authError}
+              </div>
+            )}
 
             <button
               onClick={() => handleLogin('email')}
