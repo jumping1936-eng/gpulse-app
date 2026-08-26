@@ -6,11 +6,13 @@ import {
   VenetianMask, Instagram, Facebook, Twitter, Send, ShieldAlert, 
   Download, Trash2, Lock, Plus, Image as ImageIcon, ShieldCheck,
   UserX, HelpCircle, Mail, ChevronDown, AlertOctagon, MessageSquare, 
-  AlertTriangle, ImagePlus, MessageCircle 
+  AlertTriangle, ImagePlus, MessageCircle, Ban // ✅ 總監新增：匯入 Ban 圖示給封鎖名單用
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import DevPanel from '@/components/DevPanel';
 import * as nsfwjs from 'nsfwjs';
+// ✅ 總監新增：匯入 Supabase 客戶端，準備執行徹底登出
+import { supabase } from '@/supabaseClient'; 
 
 // ==========================================
 // 效能優化：將共用 UI 元件抽離，避免 Render 時重複建立
@@ -24,7 +26,12 @@ const ToggleSwitch = ({ isOn, onToggle }: { isOn: boolean, onToggle: () => void 
   </button>
 );
 
-export default function ProfileView() {
+// ✅ 總監新增：定義 ProfileView 的 Props，接收來自 MainApp 的 onOpenBlockedUsers 事件
+interface ProfileViewProps {
+  onOpenBlockedUsers?: () => void;
+}
+
+export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const {
     isVIP, setIsVIP, isVerified, setIsVerified,
     myAvatar, setMyAvatar,
@@ -66,7 +73,6 @@ export default function ProfileView() {
     height: '178',
     weight: '70',
     role: ['互補'],
-    // ✅ 總監新增：族群屬性 (預設為狼族)
     tribe: 'wolf', 
     bio: '熱愛探索新事物，週末喜歡去咖啡廳待上一整天。在這裡尋找有趣的靈魂！',
     lookingFor: ['約會', '交友'],
@@ -96,7 +102,6 @@ export default function ProfileView() {
   const LOOKING_FOR_OPTIONS = ['約會', '交友', '聊天', '打撲克', '不設限'];
   const ROLE_OPTIONS = ['不分', '依賴', '照顧', '互補', '不設限'];
   
-  // ✅ 總監新增：族群選項清單
   const TRIBE_OPTIONS = [
     { id: 'bear', label: '熊族', icon: '🐻' },
     { id: 'wolf', label: '狼族', icon: '🐺' },
@@ -241,15 +246,26 @@ export default function ProfileView() {
     });
   };
 
-  function handleMenuClick(action: string) {
+  // ✅ 總監升級：將函數改為 async 以支援後端非同步登出
+  async function handleMenuClick(action: string) {
     switch (action) {
       case '編輯檔案': setEditForm(profile); setIsEditModalOpen(true); break;
       case '通知設定': setIsNotificationModalOpen(true); break;
       case '隱私設定': setIsPrivacyModalOpen(true); break;
+      // ✅ 總監新增：呼叫上層 (MainApp) 傳進來的封鎖名單開啟函式
+      case '封鎖名單': if(onOpenBlockedUsers) onOpenBlockedUsers(); break;
       case '幫助與支援': setIsHelpModalOpen(true); break;
       case '登出': 
         if (window.confirm('確定要登出帳號嗎？ 👋')) {
-          window.location.href = '/';
+          try {
+            // 🛡️ 真・登出機制：徹底銷毀 Supabase 在瀏覽器中的 Token
+            await supabase.auth.signOut();
+          } catch (err) {
+            console.error("登出發生錯誤:", err);
+          } finally {
+            // 無論如何，清除前端畫面並回到首頁
+            window.location.href = '/';
+          }
         }
         break;
       default: break;
@@ -396,7 +412,6 @@ export default function ProfileView() {
             <p className="text-slate-300 text-sm line-clamp-3 leading-relaxed text-left bg-slate-900 p-4 rounded-2xl border border-white/5">{profile.bio}</p>
             
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-              {/* ✅ 總監新增：主頁族群標籤顯示 (閃亮漸層) */}
               <div className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 px-3 py-1.5 rounded-full">
                 <span className="text-violet-300 text-xs font-medium flex items-center gap-1.5">
                   {TRIBE_OPTIONS.find(t => t.id === profile.tribe)?.icon} 
@@ -444,9 +459,14 @@ export default function ProfileView() {
           <Settings className="w-3.5 h-3.5" /> 帳號設定
         </h3>
         <div className="bg-white/4 border border-white/8 rounded-2xl divide-y divide-white/5 overflow-hidden">
-          {['編輯檔案', '通知設定', '隱私設定', '幫助與支援'].map(item => (
+          {/* ✅ 總監新增：將「封鎖名單」加入到陣列中渲染 */}
+          {['編輯檔案', '通知設定', '隱私設定', '封鎖名單', '幫助與支援'].map(item => (
             <button key={item} onClick={() => handleMenuClick(item)} className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/10 transition-colors">
-              <span className="text-white/80 text-sm">{item}</span>
+              <div className="flex items-center gap-3">
+                {/* 給封鎖名單一個特殊的小圖示 */}
+                {item === '封鎖名單' && <Ban className="w-4 h-4 text-slate-400" />}
+                <span className="text-white/80 text-sm">{item}</span>
+              </div>
               {item === '隱私設定' && accessRequests.some(r => r.status === 'pending') && (
                 <div className="w-2 h-2 rounded-full bg-red-500 ml-auto mr-3 animate-pulse" />
               )}
@@ -473,7 +493,7 @@ export default function ProfileView() {
       <input ref={reportFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleSupportAttachmentUpload(e, 'report')} />
 
       {/* ========================================== */}
-      {/* 1. Modal: 編輯檔案 (z-100) */}
+      {/* Modal: 編輯檔案 (z-100) */}
       {/* ========================================== */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-full duration-300">
@@ -559,7 +579,6 @@ export default function ProfileView() {
 
             <div className="bg-slate-900 border border-white/5 rounded-2xl p-4 space-y-5">
               
-              {/* ✅ 總監新增：族群選擇器 UI (完美融合在編輯頁中) */}
               <div>
                 <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-3"><Crown className="w-3.5 h-3.5" />所屬族群 (單選)</label>
                 <div className="flex flex-wrap gap-2">
@@ -626,7 +645,7 @@ export default function ProfileView() {
       )}
 
       {/* ========================================== */}
-      {/* 以下為原有的 Modal 區塊 (通知、隱私、幫助、客服、檢舉) - 內容未更動 */}
+      {/* 2. Modal: 通知設定 (z-100) */}
       {/* ========================================== */}
       {isNotificationModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in slide-in-from-right duration-300">
@@ -685,6 +704,9 @@ export default function ProfileView() {
         </div>
       )}
 
+      {/* ========================================== */}
+      {/* 3. Modal: 隱私設定 (z-100) */}
+      {/* ========================================== */}
       {isPrivacyModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in slide-in-from-right duration-300">
           <div className="flex items-center justify-between px-4 py-4 bg-slate-900 border-b border-white/10 shrink-0">
@@ -758,6 +780,9 @@ export default function ProfileView() {
         </div>
       )}
 
+      {/* ========================================== */}
+      {/* 4. Modal: 幫助與支援 (z-100) */}
+      {/* ========================================== */}
       {isHelpModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in slide-in-from-right duration-300">
           <div className="flex items-center justify-between px-4 py-4 bg-slate-900 border-b border-white/10 shrink-0">
@@ -833,6 +858,9 @@ export default function ProfileView() {
         </div>
       )}
 
+      {/* ========================================== */}
+      {/* 表單與客服 Modal (z-150) */}
+      {/* ========================================== */}
       {contactFormOpen && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-200">
