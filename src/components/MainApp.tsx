@@ -21,27 +21,38 @@ export default function MainApp() {
   const [activeChatConvo, setActiveChatConvo] = useState<Conversation | null>(null);
   const [showBlockedUsers, setShowBlockedUsers] = useState(false);
 
-  // ✅ 1. 修復聊天室白畫面 (補齊完整的 Conversation 資料結構)
+  // ✅ 總監重構：透過 RPC 取得真實房間 ID 後再進行跳轉
   useEffect(() => {
-    const handleJumpToChat = (e: any) => {
+    const handleJumpToChat = async (e: any) => {
       const targetUser = e.detail;
-      setActiveTab('chat');
-      setActiveChatConvo({
-        id: targetUser.id,
-        name: targetUser.full_name || '神秘用戶',
-        avatar: targetUser.avatar_url || '',
-        lastMessage: '剛剛透過個人檔案發起聊天...',
-        time: '現在',
-        unread: 0,
-        isOnline: targetUser.status === 'online',
-        messages: [] // 👈 關鍵防呆：防止 ChatRoom 找不到陣列而崩潰
-      } as any);
+      if (!currentUser) return;
+
+      try {
+        // 呼叫後端 RPC 取得或建立專屬房間 UUID
+        const { data: realRoomId, error } = await supabase.rpc('get_or_create_conversation', { other_id: targetUser.id });
+        if (error) throw error;
+
+        setActiveTab('chat');
+        setActiveChatConvo({
+          id: realRoomId, // 🔴 注入真實的資料庫房間 UUID
+          name: targetUser.full_name || '神秘用戶',
+          avatar: targetUser.avatar_url || '',
+          lastMessage: '',
+          time: '現在',
+          unread: 0,
+          isOnline: targetUser.status === 'online',
+          other_user: targetUser // 攜帶對方資訊供 ChatRoom 頭像使用
+        } as any);
+      } catch (err) {
+        console.error("🔴 無法建立聊天室:", err);
+        alert("建立聊天室連線失敗，請確認資料庫狀態。");
+      }
     };
+
     window.addEventListener('jump-to-chat', handleJumpToChat);
     return () => window.removeEventListener('jump-to-chat', handleJumpToChat);
-  }, []);
+  }, [currentUser]);
 
-  // ✅ 2. 毫秒級即時監聽通知
   useEffect(() => {
     if (!currentUser) return;
     const notificationChannel = supabase
