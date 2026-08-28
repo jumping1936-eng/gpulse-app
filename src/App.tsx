@@ -1,4 +1,3 @@
-// src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { AppContext } from '@/context/AppContext';
 import { AppState } from '@/types';
@@ -13,7 +12,7 @@ import { supabase } from './supabaseClient';
 import { AuthProvider, useAuth } from '@/context/AuthContext'; 
 
 // ==========================================
-// 核心業務邏輯元件 (原本的 App 降級移至此處)
+// 核心業務邏輯元件 (確保被 AuthProvider 包覆)
 // ==========================================
 function AppContent() {
   // 取得 Supabase 驗證狀態
@@ -22,32 +21,35 @@ function AppContent() {
   const [appState, setAppState] = useState<AppState>('safety-check');
   const [isChecking, setIsChecking] = useState(true);
 
-  // Global state (保留您原本的所有設定)
+  // Global state
   const [isVIP, setIsVIP] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [myAvatar, setMyAvatar] = useState<string | null>(null);
   const [stealthMode, setStealthMode] = useState(false);
   const [travelMode, setTravelMode] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
-  const [unreadInbox] = useState(3);
-  const [unreadChat, setUnreadChat] = useState(3);
+  
+  // ✅ 總監修正：預設未讀歸零，避免幽靈紅點
+  const [unreadInbox] = useState(0);
+  const [unreadChat, setUnreadChat] = useState(0);
+  
   const [showPaywall, setShowPaywall] = useState(false);
   const [simulateBlocked, setSimulateBlocked] = useState(false);
 
-  // 資料庫連線測試 (保留您的設計)
+  // 資料庫連線測試
   useEffect(() => {
     const testConnection = async () => {
-      const { data, error } = await supabase.from('profiles').select('*');
+      const { data, error } = await supabase.from('profiles').select('*').limit(1);
       if (error) {
         console.error("❌ 連線失敗，請檢查金鑰或網路：", error.message);
       } else {
-        console.log("✅ 資料庫連線成功！目前 Profiles 資料：", data);
+        console.log("✅ 資料庫連線成功！");
       }
     };
     testConnection();
   }, []);
 
-  // ✅ 2. 地理位置檢查模擬 (只控制 isChecking)
+  // 2. 地理位置檢查模擬 (只控制 isChecking)
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsChecking(false);
@@ -55,9 +57,9 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
-  // ✅ 3. 狀態機引擎：綜合判斷「地理檢查」與「登入狀態」
+  // ✅ 3. 狀態機引擎：嚴格判斷「地理檢查」與「登入狀態」
   useEffect(() => {
-    // 如果地理檢查還沒跑完，或是 AuthContext 還在跟伺服器連線，就繼續等
+    // 嚴格阻擋：如果正在檢查地理位置，或是 AuthContext 正在解析 Google Token，強制等待
     if (isChecking || isAuthLoading) return;
 
     if (simulateBlocked) {
@@ -87,7 +89,7 @@ function AppContent() {
     simulateBlocked, setSimulateBlocked,
   };
 
-  // 畫面 1：雙重 Loading 狀態 (地理檢查 or 驗證身份中)
+  // 畫面 1：雙重 Loading 狀態 (地理檢查 or 驗證身份解析中)
   if (isChecking || isAuthLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
@@ -108,7 +110,6 @@ function AppContent() {
       {appState === 'blocked' && (
         <SafetyGuard onSimulateReal={() => { setSimulateBlocked(false); }} />
       )}
-      {/* 若是新登入，走原本的 Legal 流程；若是已登入，上面的 useEffect 會直接切換到 'app' */}
       {appState === 'login' && (
         <LoginScreen onLogin={() => setAppState('legal')} />
       )}

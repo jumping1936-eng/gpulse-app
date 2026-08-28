@@ -1,33 +1,49 @@
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { User } from '@/types';
-import { STORY_USERS } from '@/data/mockData';
-import { useApp } from '@/context/AppContext';
+// 移除了 STORY_USERS 的假資料依賴
 
+// ✅ 1. 擴充 Props，接收來自 ExploreTab 的真實資料
 interface Props {
-  onViewStory: (user: User) => void;
+  onViewStory: (user: any) => void;
+  profiles: any[];
+  myProfile: any | null;
 }
 
-export default function StoriesBar({ onViewStory }: Props) {
-  const { myAvatar } = useApp();
+export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) {
   const [viewedStories, setViewedStories] = useState<Set<string>>(new Set());
 
-  function handleView(user: User) {
+  function handleView(user: any) {
     setViewedStories(prev => new Set([...prev, user.id]));
     onViewStory(user);
   }
 
+  // ✅ 2. 動態運算缺乏頭像時的替代視覺
+  const getGradient = (index: number) => {
+    const gradients = [
+      'from-blue-600 to-violet-600',
+      'from-orange-500 to-red-600',
+      'from-emerald-500 to-teal-700',
+      'from-pink-500 to-rose-600'
+    ];
+    return gradients[index % gradients.length];
+  };
+
+  const getInitials = (name: string) => {
+    return name ? name.substring(0, 2).toUpperCase() : '??';
+  };
+
   return (
     <div className="px-3 pt-4 pb-2">
-      {/* ✅ 總監已將跨瀏覽器隱藏捲軸的 Tailwind 語法整合進來了，您無需尋找！ */}
       <div className="flex items-center gap-3 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
         
-        {/* My story */}
+        {/* ========================================== */}
+        {/* 自己的限時動態 (讀取真實 myProfile) */}
+        {/* ========================================== */}
         <div className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group">
           <div className="relative">
             <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-dashed border-white/20 group-hover:border-violet-500/60 transition-all flex items-center justify-center overflow-hidden">
-              {myAvatar ? (
-                <img src={myAvatar} alt="Me" className="w-full h-full object-cover" />
+              {myProfile?.avatar_url ? (
+                <img src={myProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center">
                   <span className="text-white/50 text-lg font-bold">我</span>
@@ -41,9 +57,12 @@ export default function StoriesBar({ onViewStory }: Props) {
           <span className="text-white/50 text-[10px] font-medium">我的動態</span>
         </div>
 
-        {/* Other users' stories */}
-        {STORY_USERS.map(user => {
+        {/* ========================================== */}
+        {/* 其他使用者的限時動態 (讀取真實 profiles，最多取前 15 筆避免過載) */}
+        {/* ========================================== */}
+        {profiles.slice(0, 15).map((user, index) => {
           const isViewed = viewedStories.has(user.id);
+          
           return (
             <div
               key={user.id}
@@ -56,16 +75,31 @@ export default function StoriesBar({ onViewStory }: Props) {
                   : 'linear-gradient(135deg, #7c3aed, #3b82f6, #22d3ee)',
                 padding: isViewed ? '2px' : '2.5px',
               }}>
-                <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${user.gradientFrom} ${user.gradientTo} flex items-center justify-center border-2 border-slate-950 transition-all group-hover:scale-105 overflow-hidden`}>
-                  <span className="text-white font-bold text-sm">{user.initials}</span>
+                <div className="w-14 h-14 rounded-full flex items-center justify-center border-2 border-slate-950 transition-all group-hover:scale-105 overflow-hidden bg-slate-800">
+                  
+                  {/* 若有真實頭像則顯示，否則顯示漸層與縮寫 */}
+                  {user.avatar_url ? (
+                    <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-br ${getGradient(index)} flex items-center justify-center`}>
+                      <span className="text-white font-bold text-sm">
+                        {getInitials(user.full_name)}
+                      </span>
+                    </div>
+                  )}
+
                 </div>
+                
+                {/* 未讀時的呼吸燈特效 */}
                 {!isViewed && (
                   <div className="absolute inset-0 rounded-full animate-ping opacity-20"
                     style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6, #22d3ee)' }} />
                 )}
               </div>
+              
+              {/* 取名字的第一個單字以防過長 */}
               <span className={`text-[10px] font-medium truncate max-w-[56px] ${isViewed ? 'text-white/30' : 'text-white/70'}`}>
-                {user.name}
+                {user.full_name?.split(' ')[0] || 'Unknown'}
               </span>
             </div>
           );

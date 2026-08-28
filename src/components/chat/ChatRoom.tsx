@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Lock, Timer, Send, BadgeCheck, Crown, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Timer, Send, ImageIcon, User as UserIcon } from 'lucide-react';
 import { Conversation, Message } from '@/types';
+import { supabase } from '@/supabaseClient';
 
 interface Props {
   convo: Conversation;
@@ -8,162 +9,156 @@ interface Props {
 }
 
 export default function ChatRoom({ convo, onBack }: Props) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'm1', senderId: convo.user.id, content: '嘿！今天過得怎麼樣？ 😊',
-      timestamp: new Date(Date.now() - 3600000), isVanish: false, revealed: true, removed: false,
-    },
-    {
-      id: 'm2', senderId: 'me', content: '還不錯！剛從健身房回來 💪',
-      timestamp: new Date(Date.now() - 3500000), isVanish: false, revealed: true, removed: false,
-    },
-    {
-      id: 'm3', senderId: convo.user.id, content: '🔥🔥🔥',
-      timestamp: new Date(Date.now() - 3400000), isVanish: false, revealed: true, removed: false,
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [myId, setMyId] = useState<string | null>(null);
   const [vanishMode, setVanishMode] = useState(false);
   
   const bottomRef = useRef<HTMLDivElement>(null);
-  
-  // ✅ 總監新增：用來觸發隱藏檔案上傳的 Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetchMessages();
+    setupRealtime();
+    return () => {
+      supabase.removeAllChannels();
+    };
+  }, [convo.id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  function sendMessage() {
-    if (!input.trim()) return;
-    const newMsg: Message = {
-      id: `m${Date.now()}`,
-      senderId: 'me',
-      content: input.trim(),
-      timestamp: new Date(),
-      isVanish: vanishMode,
-      revealed: !vanishMode,
-      removed: false,
-    };
-    setMessages(prev => [...prev, newMsg]);
-    setInput('');
-  }
+  const fetchMessages = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) setMyId(user.id);
 
-  // ✅ 總監新增：處理圖片選擇與本機預覽 (Base64)
-  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', convo.id)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      setMessages(data as Message[]);
+    }
+  };
+
+  const setupRealtime = () => {
+    supabase
+      .channel(`room:${convo.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convo.id}` },
+        (payload) => {
+          const newMsg = payload.new as Message;
+          // 避免自己發送的訊息重複渲染
+          setMessages((prev) => {
+            if (prev.find(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        }
+      )
+      .subscribe();
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim() || !myId) return;
+    const content = input.trim();
+    setInput('');
+
+    try {
+      // 1. 寫入訊息表
+      const { error: msgError } = await supabase.from('messages').insert({
+        conversation_id: convo.id,
+        sender_id: myId,
+        content: content,
+        is_read: false
+      });
+      if (msgError) throw msgError;
+
+      // 2. 更新房間最後對話狀態
+      await supabase.from('conversations').update({
+        last_message: content,
+        last_message_time: new Date().toISOString()
+      }).eq('id', convo.id);
+
+    } catch (error) {
+      console.error('🔴 傳送訊息失敗:', error);
+    }
+  };
+
+  // ⚠️ 總監防呆建議：目前用 Base64 直接存入 TEXT 欄位。上線前建議改接 Supabase Storage 避免容量超載。
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !myId) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64String = event.target?.result as string;
-      const newMsg: Message = {
-        id: `img${Date.now()}`,
-        senderId: 'me',
-        content: base64String, // 將圖片 Base64 當作訊息內容儲存
-        timestamp: new Date(),
-        isVanish: vanishMode,
-        revealed: !vanishMode,
-        removed: false,
-      };
-      setMessages(prev => [...prev, newMsg]);
+      try {
+        await supabase.from('messages').insert({
+          conversation_id: convo.id,
+          sender_id: myId,
+          content: base64String,
+          is_read: false
+        });
+        await supabase.from('conversations').update({
+          last_message: '[圖片]',
+          last_message_time: new Date().toISOString()
+        }).eq('id', convo.id);
+      } catch (err) {
+        console.error('🔴 圖片傳送失敗:', err);
+      }
     };
-    // 讀取檔案為 Data URL (Base64)
     reader.readAsDataURL(file);
-    
-    // 清空 input，確保下次選同一張照片也能觸發 onChange
     e.target.value = '';
-  }
-
-  function revealMessage(id: string) {
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, revealed: true } : m));
-    setTimeout(() => {
-      setMessages(prev => prev.map(m => m.id === id ? { ...m, removed: true } : m));
-    }, 3000);
-  }
-
-  function formatTime(d: Date) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  };
 
   return (
     <div className="h-full flex flex-col bg-slate-950">
-      {/* Header */}
-      <div className="flex-shrink-0 bg-slate-950/95 backdrop-blur-xl border-b border-white/8 px-4 py-3 flex items-center gap-3">
-        <button onClick={onBack} className="text-white/60 hover:text-white transition-colors">
+      {/* 頂部 Header */}
+      <div className="flex-shrink-0 bg-slate-950/95 backdrop-blur-xl border-b border-white/8 px-4 py-3 flex items-center gap-3 z-10">
+        <button onClick={onBack} className="text-white/60 hover:text-white transition-colors p-2">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${convo.user.gradientFrom} ${convo.user.gradientTo} flex items-center justify-center`}>
-          <span className="text-white font-bold text-sm">{convo.user.initials}</span>
+        <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden flex items-center justify-center">
+          {convo.other_user.avatar_url ? (
+             <img src={convo.other_user.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+          ) : (
+             <UserIcon className="w-5 h-5 text-slate-500" />
+          )}
         </div>
         <div className="flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-white font-semibold text-sm">{convo.user.name}</span>
-            {convo.user.isVerified && <BadgeCheck className="w-3.5 h-3.5 text-cyan-400" />}
-            {convo.user.isVIP && <Crown className="w-3 h-3 text-amber-400" />}
-          </div>
-          <p className={`text-xs ${convo.user.lastSeen === 'Online' ? 'text-emerald-400' : 'text-white/35'}`}>
-            {convo.user.lastSeen}
-          </p>
+          <span className="text-white font-bold text-sm tracking-wide">
+            {convo.other_user.full_name || '無名探索者'}
+          </span>
         </div>
-        <button className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1.5 hover:bg-amber-500/20 transition-all">
-          <Lock className="w-3 h-3 text-amber-400" />
-          <span className="text-amber-400 text-xs font-medium">相簿</span>
-        </button>
       </div>
 
-      {/* Vanish mode banner */}
-      {vanishMode && (
-        <div className="flex-shrink-0 bg-violet-900/30 border-b border-violet-500/20 px-4 py-2 flex items-center gap-2">
-          <Timer className="w-3.5 h-3.5 text-violet-400 animate-pulse" />
-          <span className="text-violet-400 text-xs font-medium">閱後即焚模式開啟 — 訊息查看後將自動消失</span>
-        </div>
-      )}
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {messages.filter(m => !m.removed).map(msg => {
-          const isMe = msg.senderId === 'me';
-          // ✅ 總監新增：判斷內容是否為圖片 Base64
+      {/* 訊息顯示區塊 */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+        {messages.map(msg => {
+          const isMe = msg.sender_id === myId;
           const isImage = msg.content.startsWith('data:image');
           
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className="max-w-[75%] space-y-1">
-                <div
-                  onClick={() => msg.isVanish && !msg.revealed ? revealMessage(msg.id) : undefined}
-                  className={`relative px-4 py-2.5 rounded-2xl text-sm leading-relaxed transition-all duration-300 ${
-                    isMe
-                      ? 'bg-gradient-to-br from-violet-600 to-blue-600 text-white rounded-br-sm'
-                      : 'bg-white/8 border border-white/10 text-white/85 rounded-bl-sm'
-                  } ${msg.isVanish && !msg.revealed ? 'cursor-pointer select-none' : ''} ${
-                    isImage ? 'p-1.5' : '' // 如果是圖片，減少 padding 讓圖片更貼合邊緣
-                  }`}
+                <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                    isMe 
+                      ? 'bg-gradient-to-br from-violet-600 to-blue-600 text-white rounded-br-sm shadow-md shadow-violet-500/20' 
+                      : 'bg-white/10 text-white/90 rounded-bl-sm border border-white/5'
+                  } ${isImage ? 'p-1.5 bg-transparent border-0 shadow-none' : ''}`}
                 >
-                  {msg.isVanish && !msg.revealed ? (
-                    <div className="flex items-center gap-2 px-2 py-1">
-                      <span className="blur-sm select-none text-white/70">
-                        {isImage ? '[傳送了一張圖片]' : msg.content}
-                      </span>
-                      <span className="text-xs text-white/50 flex-shrink-0 not-italic">👁 輕觸</span>
-                    </div>
+                  {isImage ? (
+                    <img src={msg.content} alt="Uploaded" className="w-full max-w-[220px] rounded-2xl object-cover border border-white/10" />
                   ) : (
-                    // ✅ 總監新增：渲染圖片或純文字
-                    isImage ? (
-                      <img src={msg.content} alt="Uploaded" className="w-full max-w-[200px] rounded-xl object-cover" />
-                    ) : (
-                      msg.content
-                    )
-                  )}
-                  {msg.isVanish && msg.revealed && (
-                    <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-violet-500 rounded-full flex items-center justify-center z-10">
-                      <Timer className="w-2.5 h-2.5 text-white" />
-                    </div>
+                    msg.content
                   )}
                 </div>
-                <p className={`text-[10px] text-white/25 ${isMe ? 'text-right' : 'text-left'}`}>
-                  {formatTime(msg.timestamp)}
-                  {msg.isVanish && <span className="ml-1 text-violet-400/60">· 閱後即焚</span>}
+                <p className={`text-[10px] text-white/30 ${isMe ? 'text-right' : 'text-left'}`}>
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>
@@ -172,54 +167,34 @@ export default function ChatRoom({ convo, onBack }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input Area */}
-      <div className="flex-shrink-0 bg-slate-950/95 backdrop-blur-xl border-t border-white/8 px-3 py-3 safe-area-bottom">
-        <div className="flex items-center gap-2">
-          
-          {/* ✅ 總監新增：隱藏的 File Input */}
-          <input 
-            type="file" 
-            accept="image/*" 
-            className="hidden" 
-            ref={fileInputRef} 
-            onChange={handleImageUpload} 
-          />
-          
-          {/* ✅ 改用 onClick 觸發隱藏的 fileInputRef */}
+      {/* 輸入控制區塊 */}
+      <div className="flex-shrink-0 bg-slate-950/95 backdrop-blur-xl border-t border-white/8 px-4 py-4 safe-area-bottom">
+        <div className="flex items-center gap-3">
+          <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
           <button 
             onClick={() => fileInputRef.current?.click()}
-            className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 hover:bg-white/10 transition-all"
+            className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors flex-shrink-0"
           >
-            <ImageIcon className="w-4 h-4 text-white/40" />
+            <ImageIcon className="w-5 h-5 text-white/60" />
           </button>
           
-          <button
-            onClick={() => setVanishMode(!vanishMode)}
-            className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-              vanishMode
-                ? 'bg-violet-600/30 border border-violet-500/60 shadow-lg shadow-violet-500/20'
-                : 'bg-white/5 border border-white/10 hover:bg-white/10'
-            }`}
-            title="切換閱後即焚模式"
-          >
-            <Timer className={`w-4 h-4 ${vanishMode ? 'text-violet-400' : 'text-white/40'}`} />
-          </button>
-          <div className="flex-1 bg-white/5 border border-white/10 rounded-full flex items-center px-4 focus-within:border-violet-500/50 transition-all">
+          <div className="flex-1 bg-white/5 border border-white/10 rounded-full flex items-center px-4 transition-colors focus-within:border-violet-500/50">
             <input
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder={vanishMode ? '💬 閱後即焚模式...' : '輸入訊息...'}
-              className="flex-1 bg-transparent text-white placeholder-white/30 text-sm py-2.5 outline-none"
+              placeholder="輸入訊息..."
+              className="flex-1 bg-transparent text-white placeholder-white/30 text-sm py-3 outline-none"
             />
           </div>
+          
           <button
             onClick={sendMessage}
             disabled={!input.trim()}
-            className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 disabled:from-slate-700 disabled:to-slate-700 flex items-center justify-center flex-shrink-0 transition-all shadow-lg shadow-violet-500/20 disabled:shadow-none"
+            className="w-10 h-10 rounded-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:bg-slate-700 flex items-center justify-center flex-shrink-0 transition-colors shadow-lg shadow-violet-500/30 disabled:shadow-none"
           >
-            <Send className="w-4 h-4 text-white" />
+            <Send className="w-4 h-4 text-white ml-0.5" />
           </button>
         </div>
       </div>

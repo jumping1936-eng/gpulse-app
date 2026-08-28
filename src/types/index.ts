@@ -2,6 +2,7 @@ export type AppState = 'safety-check' | 'blocked' | 'login' | 'legal' | 'app';
 export type Tab = 'explore' | 'chat' | 'inbox' | 'profile';
 export type TribeType = 'all' | 'bear' | 'wolf' | 'otter' | 'twink' | 'jock' | 'chat' | 'relationship';
 
+// 保留原有的 User 介面供其他靜態畫面使用
 export interface User {
   id: string;
   name: string;
@@ -23,22 +24,39 @@ export interface User {
   bodyType: string;
 }
 
-export interface Message {
+// ✅ 總監新增：對應資料庫的真實個人檔案
+export interface DBProfile {
   id: string;
-  senderId: string;
-  content: string;
-  timestamp: Date;
-  isVanish: boolean;
-  revealed: boolean;
-  removed: boolean;
+  full_name: string;
+  avatar_url: string;
+  bio?: string;
 }
 
+// ✅ 總監修正：對齊 Supabase messages 資料表
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+  // 前端特有狀態 (閱後即焚)
+  isVanish?: boolean;
+  revealed?: boolean;
+  removed?: boolean;
+}
+
+// ✅ 總監修正：對齊 Supabase conversations 資料表，並加入關聯查詢的對方資料
 export interface Conversation {
   id: string;
-  user: User;
-  lastMessage: string;
-  lastTime: string;
-  unread: number;
+  created_at: string;
+  user1_id: string;
+  user2_id: string;
+  last_message: string;
+  last_message_time: string;
+  // 透過 Join 撈取出來的對方真實資料
+  other_user: DBProfile;
+  unread?: number;
 }
 
 export interface Notification {
