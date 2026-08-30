@@ -19,11 +19,12 @@ interface ProfileRow {
 
 interface Props {
   activeTribe: TribeType;
-  profiles: ProfileRow[]; 
-  myProfile: ProfileRow | null; 
+  profiles: ProfileRow[];
+  myProfile: ProfileRow | null;
+  onViewProfile?: (profile: ProfileRow | null) => void;
 }
 
-export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props) {
+export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewProfile }: Props) {
   const { blockedUsers, isVerified, isVIP } = useApp();
   const [selectedUser, setSelectedUser] = useState<ProfileRow | null>(null);
 
@@ -61,7 +62,11 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props)
         {/* ========================================== */}
         {/* 自己的名片 (永遠固定在第一格，讀取真實 myProfile) */}
         {/* ========================================== */}
-        <div className="relative aspect-square rounded-2xl overflow-hidden bg-slate-950 border-2 border-violet-500/50 shadow-lg shadow-violet-500/15 backdrop-blur-sm cursor-pointer group hover:shadow-violet-500/25 transition-all hover:scale-[1.02]">
+        <button
+          type="button"
+          onClick={() => onViewProfile?.(myProfile ?? null)}
+          className="relative aspect-square rounded-2xl overflow-hidden bg-slate-950 border-2 border-violet-500/50 shadow-lg shadow-violet-500/15 backdrop-blur-sm cursor-pointer group hover:shadow-violet-500/25 transition-all hover:scale-[1.02]"
+        >
           {myProfile?.avatar_url ? (
             <img src={myProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
           ) : (
@@ -83,7 +88,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props)
           <div className="absolute top-2 left-2 bg-violet-600/40 backdrop-blur-xl border border-violet-500/40 rounded-full px-2 py-0.5">
             <span className="text-violet-300 text-[9px] font-bold">你自己</span>
           </div>
-        </div>
+        </button>
 
         {/* ========================================== */}
         {/* 其他使用者的名片 (讀取真實 profiles) */}

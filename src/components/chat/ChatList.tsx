@@ -2,15 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { MessageCircle, User as UserIcon, Loader2, Sparkles } from 'lucide-react';
 import { Conversation, DBProfile } from '@/types';
 import { supabase } from '@/supabaseClient';
+import { useApp } from '@/context/AppContext';
 
 interface Props {
   onOpenConvo: (c: Conversation) => void;
 }
 
 export default function ChatList({ onOpenConvo }: Props) {
+  const { setUnreadChat } = useApp();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setMyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setUnreadChat(0);
+  }, [setUnreadChat]);
 
   const formatMessageTime = (value?: string) => {
     if (!value) return '剛剛';
@@ -156,7 +162,11 @@ export default function ChatList({ onOpenConvo }: Props) {
               return (
                 <div
                   key={convo.id}
-                  onClick={() => onOpenConvo(convo)}
+                  onClick={() => {
+                    setUnreadChat(0);
+                    setConversations(prev => prev.map(item => item.id === convo.id ? { ...item, unread: 0 } : item));
+                    onOpenConvo(convo);
+                  }}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer"
                 >
                   <div className="relative flex-shrink-0">

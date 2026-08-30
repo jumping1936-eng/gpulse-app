@@ -1,27 +1,100 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, UserX, Unlock, ShieldAlert } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/supabaseClient';
 
-// ==========================================
-// 領域模型：黑名單假資料 (Mock Blocked Users)
-// ==========================================
-const MOCK_BLOCKED_USERS = [
-  { id: 'b1', name: 'Kevin', initials: 'KV', gradient: 'from-orange-400 to-red-500', date: '2023/10/15' },
-  { id: 'b2', name: 'John', initials: 'JH', gradient: 'from-slate-600 to-slate-800', date: '2023/10/20' },
-];
+interface BlockedUser {
+  id: string;
+  blocked_id: string;
+  name: string;
+  initials: string;
+  gradient: string;
+  date: string;
+  avatar?: string;
+}
 
 interface Props {
   onBack: () => void;
 }
 
 export default function BlockedUsersList({ onBack }: Props) {
-  // ✅ 狀態管理：目前被封鎖的使用者名單
-  const [blockedUsers, setBlockedUsers] = useState(MOCK_BLOCKED_USERS);
+  const { user } = useAuth();
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // 處理解除封鎖的邏輯
-  const handleUnblock = (userId: string) => {
-    // 實務上這裡會打 API: POST /api/users/unblock { userId }
-    // UI 先行：將該使用者從列表中移除
-    setBlockedUsers(prev => prev.filter(user => user.id !== userId));
+  useEffect(() => {
+    const loadBlockedUsers = async () => {
+      if (!user?.id) return;
+
+      setIsLoading(true);
+      try {
+        const { data: blockRows, error: blockError } = await supabase
+          .from('blocks')
+          .select('*')
+          .eq('blocker_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (blockError) throw blockError;
+
+        const blockedIds = (blockRows ?? []).map((row) => row.blocked_id).filter(Boolean);
+        if (!blockedIds.length) {
+          setBlockedUsers([]);
+          return;
+        }
+
+        const { data: profileRows, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .in('id', blockedIds);
+
+        if (profileError) throw profileError;
+
+        const profileMap = new Map((profileRows ?? []).map((profile) => [profile.id, profile]));
+
+        const nextBlockedUsers = (blockRows ?? []).map((row) => {
+          const profile = profileMap.get(row.blocked_id);
+          const name = profile?.full_name || '未知使用者';
+          const initials = name.split(' ').map((part: string) => part[0]).join('').slice(0, 2).toUpperCase() || '??';
+          return {
+            id: row.id,
+            blocked_id: row.blocked_id,
+            name,
+            initials,
+            gradient: 'from-orange-400 to-red-500',
+            date: row.created_at ? new Date(row.created_at).toLocaleDateString('zh-TW') : '未知日期',
+            avatar: profile?.avatar_url,
+          } satisfies BlockedUser;
+        });
+
+        setBlockedUsers(nextBlockedUsers);
+      } catch (error) {
+        console.error('載入封鎖名單失敗:', error);
+        setBlockedUsers([]);
+        alert('無法載入封鎖名單，請稍後再試。');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadBlockedUsers();
+  }, [user?.id]);
+
+  const handleUnblock = async (userId: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('blocks')
+        .delete()
+        .eq('blocker_id', user.id)
+        .eq('blocked_id', userId);
+
+      if (error) throw error;
+      setBlockedUsers(prev => prev.filter(row => row.blocked_id !== userId));
+    } catch (error) {
+      console.error('解除封鎖失敗:', error);
+      alert('解除封鎖失敗，請稍後再試。');
+    }
   };
 
   return (
@@ -50,7 +123,9 @@ export default function BlockedUsersList({ onBack }: Props) {
 
       {/* 名單列表區塊 */}
       <div className="flex-1 overflow-y-auto px-5 pb-6">
-        {blockedUsers.length > 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full py-12 text-sm text-slate-400">載入中...</div>
+        ) : blockedUsers.length > 0 ? (
           <div className="space-y-3">
             {blockedUsers.map((user) => (
               <div 

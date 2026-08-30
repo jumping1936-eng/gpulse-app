@@ -228,13 +228,13 @@ export default function LoginScreen({ onLogin }: Props) {
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-12 relative z-0 mt-12">
         <div className="mb-8 flex flex-col items-center">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-500 via-blue-500 to-cyan-400 flex items-center justify-center mb-4 shadow-2xl shadow-violet-500/30">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 flex items-center justify-center mb-4 shadow-2xl shadow-violet-500/30 animate-pulse">
             <Activity className="w-10 h-10 text-white" strokeWidth={2.5} />
           </div>
           <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-violet-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">
             GPulse
           </h1>
-          <p className="text-white/40 text-sm mt-1 tracking-widest uppercase">{t.tagline}</p>
+          <p className="text-white/40 text-sm mt-1 tracking-tight uppercase">{t.tagline}</p>
         </div>
 
         <div className="w-full max-w-sm">

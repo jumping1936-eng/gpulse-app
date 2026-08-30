@@ -107,11 +107,16 @@ export default function MainApp() {
       .channel('realtime-notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `receiver_id=eq.${currentUser.id}` },
         () => {
-          if (activeTab !== 'inbox') setUnreadInbox(unreadInbox + 1);
+          setUnreadInbox((prev: number) => (activeTab === 'inbox' ? prev : prev + 1));
         }
       ).subscribe();
     return () => { supabase.removeChannel(notificationChannel); };
-  }, [currentUser, activeTab, unreadInbox, setUnreadInbox]);
+  }, [currentUser, activeTab, setUnreadInbox]);
+
+  useEffect(() => {
+    if (activeTab === 'inbox') setUnreadInbox(0);
+    if (activeTab === 'chat') setUnreadChat(0);
+  }, [activeTab, setUnreadInbox, setUnreadChat]);
 
   const tabs = [
     { id: 'home' as Tab, icon: Home, label: '首頁' },

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Mail, UserPlus, Lock, Loader2, Inbox } from 'lucide-react';
+import { Heart, Mail, UserPlus, Lock, Loader2, Inbox, Sparkles, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
+import { useApp } from '@/context/AppContext';
 
 export default function NotificationsTab() {
   const { user } = useAuth();
+  const { setUnreadInbox } = useApp();
   const [activeTab, setActiveTab] = useState<'interaction' | 'system'>('interaction');
   const [notifications, setNotifications] = useState<Array<{
     id: string;
@@ -15,26 +17,43 @@ export default function NotificationsTab() {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchNotifications = React.useCallback(async () => {
+    if (!user?.id) {
+      setNotifications([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('notifications')
         .select(`id, type, created_at, sender:sender_id (id, full_name, avatar_url)`)
-        .eq('receiver_id', user?.id)
+        .eq('receiver_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (data) setNotifications(data as Array<{ id: string; type: string; created_at: string; sender?: { id?: string; full_name?: string; avatar_url?: string } }>);
+
+      setNotifications((data ?? []) as Array<{ id: string; type: string; created_at: string; sender?: { id?: string; full_name?: string; avatar_url?: string } }>);
     } catch (err) {
-      console.error("🔴 獲取通知失敗:", err);
+      console.error('🔴 獲取通知失敗:', err);
+      setNotifications([]);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (user) fetchNotifications();
-  }, [user, fetchNotifications]);
+    setUnreadInbox(0);
+    fetchNotifications();
+
+    return () => {
+      setUnreadInbox(0);
+    };
+  }, [fetchNotifications, setUnreadInbox]);
+
+  const systemNotifications = notifications.filter((item) =>
+    item.type === 'system' || item.type === 'welcome' || item.type === 'security' || item.type === 'update'
+  );
 
   const getInitials = (name: string) => name ? name.substring(0, 2).toUpperCase() : '??';
   const getGradient = (id: string = '') => {
@@ -52,10 +71,10 @@ export default function NotificationsTab() {
   };
 
   return (
-    <div className="h-full bg-[#0B0C10] flex flex-col font-sans text-white relative">
-      <div className="pt-6 pb-4 px-5 shrink-0 sticky top-0 bg-[#0B0C10]/95 backdrop-blur-md z-20">
-        <h1 className="text-2xl font-bold tracking-wider mb-6">通知</h1>
-        <div className="flex gap-4">
+    <div className="h-full bg-slate-950 flex flex-col font-sans text-white relative">
+      <div className="pt-5 pb-4 px-4 shrink-0 sticky top-0 bg-slate-950/95 backdrop-blur-xl border-b border-white/8 z-20">
+        <h1 className="text-2xl font-bold tracking-wider mb-5">通知</h1>
+        <div className="flex gap-3">
           <button
             onClick={() => setActiveTab('interaction')}
             className={`flex-1 py-3 px-4 rounded-full flex items-center justify-center gap-2 text-sm font-medium transition-all duration-300 ${
@@ -74,9 +93,8 @@ export default function NotificationsTab() {
           </button>
         </div>
       </div>
-      <div className="h-[1px] w-full bg-white/10 shrink-0" />
 
-      <div className="flex-1 overflow-y-auto no-scrollbar relative">
+      <div className="flex-1 overflow-y-auto no-scrollbar relative px-4 pb-5">
         {activeTab === 'interaction' && (
           <div className="flex flex-col animate-in fade-in slide-in-from-left-4 duration-300">
             {isLoading ? (
@@ -94,7 +112,6 @@ export default function NotificationsTab() {
                 const sender = notif.sender || {};
                 const senderName = typeof sender.full_name === 'string' ? sender.full_name : '神秘用戶';
 
-                // ✅ 根據不同 type 顯示不同文字與 Icon
                 let message = '傳送了通知';
                 let IconComponent = Heart;
                 let iconColor = 'text-pink-500';
@@ -104,7 +121,7 @@ export default function NotificationsTab() {
                 else if (notif.type === 'match') { message = '與你配對成功！'; IconComponent = UserPlus; iconColor = 'text-cyan-400'; }
 
                 return (
-                  <div key={notif.id} className="flex items-center gap-4 p-5 border-b border-white/5 hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <div key={notif.id} className="flex items-center gap-4 py-4 border-b border-white/5 hover:bg-white/[0.02] cursor-pointer transition-colors group">
                     <div className={`relative w-12 h-12 rounded-full ${!sender.avatar_url ? `bg-gradient-to-br ${getGradient(sender.id)}` : 'bg-slate-800'} flex items-center justify-center shrink-0 overflow-hidden`}>
                       {sender.avatar_url ? (
                          <img src={sender.avatar_url} alt="avatar" className="w-full h-full object-cover" />
@@ -126,6 +143,44 @@ export default function NotificationsTab() {
               })
             )}
             <div className="h-24" />
+          </div>
+        )}
+
+        {activeTab === 'system' && (
+          <div className="flex flex-col animate-in fade-in slide-in-from-left-4 duration-300 pt-4">
+            {systemNotifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[420px] rounded-[28px] border border-violet-500/20 bg-gradient-to-br from-violet-500/10 via-slate-900 to-sky-500/10 text-center px-6 shadow-[0_20px_60px_rgba(76,29,149,0.22)]">
+                <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-400/30 bg-violet-500/10 text-violet-200 shadow-lg shadow-violet-500/20">
+                  <Sparkles className="h-8 w-8" />
+                </div>
+                <p className="text-[11px] uppercase tracking-[0.28em] text-violet-300/75">system status</p>
+                <h3 className="mt-3 text-2xl font-bold text-white">訊息中心是空的</h3>
+                <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300">
+                  目前還沒有系統公告或安全更新，等到重要通知來臨時，我們會在這裡先行提醒你。
+                </p>
+                <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-violet-200">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  你的帳號目前運作正常
+                </div>
+              </div>
+            ) : (
+              systemNotifications.map((notif) => (
+                <div key={notif.id} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 mb-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/25 to-blue-500/25 text-violet-200">
+                        <Mail className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-white">系統更新</div>
+                        <div className="text-[11px] text-slate-400">{formatTimeAgo(notif.created_at)}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">{notif.type === 'system' ? '系統已同步更新，帳號與安全狀態正常。' : '重要提醒：請保持個人資料與隱私設定最新。'}</p>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

@@ -1,3 +1,5 @@
+import type { Dispatch, SetStateAction } from 'react';
+
 export type AppState = 'safety-check' | 'blocked' | 'login' | 'legal' | 'app';
 export type Tab = 'home' | 'explore' | 'chat' | 'inbox' | 'profile';
 export type TribeType = 'all' | 'bear' | 'wolf' | 'otter' | 'twink' | 'jock' | 'chat' | 'relationship';
@@ -90,9 +92,9 @@ export interface AppContextType {
   blockedUsers: Set<string>;
   blockUser: (id: string) => void;
   unreadInbox: number;
-  setUnreadInbox: (v: number) => void;
+  setUnreadInbox: Dispatch<SetStateAction<number>>;
   unreadChat: number;
-  setUnreadChat: (v: number) => void;
+  setUnreadChat: Dispatch<SetStateAction<number>>;
   showPaywall: boolean;
   setShowPaywall: (v: boolean) => void;
   simulateBlocked: boolean;

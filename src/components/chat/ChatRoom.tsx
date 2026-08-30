@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Send, ImageIcon, User as UserIcon, Timer, Check, CheckCheck, Flame } from 'lucide-react';
+import { ArrowLeft, Send, ImageIcon, User as UserIcon, Timer, Check, CheckCheck, Flame, MoreVertical, ShieldOff, Lock, UserSquare2, Trash2, Bell } from 'lucide-react';
 import { Conversation, Message } from '@/types';
 import { supabase } from '@/supabaseClient';
-import { useAuth } from '@/context/AuthContext'; // ✅ 總監導入：直接使用全域 Auth 狀態，拒絕非同步延遲！
+import { useAuth } from '@/context/AuthContext';
+import { useApp } from '@/context/AppContext';
+import ProfileModal from '@/components/explore/ProfileModal';
 
 interface Props {
   convo: Conversation;
@@ -74,14 +76,16 @@ const MessageBubble = ({
 };
 
 export default function ChatRoom({ convo, onBack }: Props) {
-  // ✅ 使用全域 Auth 取代原本的 useState，確保一進畫面就擁有自己的 ID
   const { user: currentUser } = useAuth();
+  const { setUnreadChat } = useApp();
   const myId = currentUser?.id;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [vanishMode, setVanishMode] = useState(false);
-  
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -129,12 +133,18 @@ export default function ChatRoom({ convo, onBack }: Props) {
   }, [convo.id, myId]);
 
   useEffect(() => {
+    setUnreadChat(0);
+
     if (myId) {
       fetchMessagesAndMarkRead();
       setupRealtime();
     }
-    return () => { supabase.removeAllChannels(); };
-  }, [convo?.id, myId, fetchMessagesAndMarkRead, setupRealtime]);
+
+    return () => {
+      setUnreadChat(0);
+      supabase.removeAllChannels();
+    };
+  }, [convo?.id, myId, fetchMessagesAndMarkRead, setupRealtime, setUnreadChat]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -179,9 +189,75 @@ export default function ChatRoom({ convo, onBack }: Props) {
   };
 
   const handleSelfDestruct = useCallback(async (msgId: string) => {
-    setMessages(prev => prev.filter(m => m.id !== msgId)); 
-    await supabase.from('messages').update({ is_hidden: true }).eq('id', msgId); 
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+    await supabase.from('messages').update({ is_hidden: true }).eq('id', msgId);
   }, []);
+
+  const handleClearChat = async () => {
+    if (!convo.id) return;
+
+    const confirmed = window.confirm('確定要刪除此聊天室的所有訊息嗎？（此動作無法復原）');
+    if (!confirmed) return;
+
+    const previousMessages = [...messages];
+    setMenuOpen(false);
+    setMessages([]);
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ is_hidden: true })
+        .eq('conversation_id', convo.id)
+        .or(`sender_id.eq.${myId},sender_id.is.null`);
+
+      if (error) throw error;
+      alert('已刪除此聊天室中的所有訊息。');
+    } catch (error) {
+      console.error('💥 刪除訊息失敗（soft delete）:', error);
+      setMessages(previousMessages);
+      alert('刪除訊息失敗，已恢復訊息內容。請稍後再試。');
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!currentUser?.id || !convo.other_user?.id) return;
+    setMenuOpen(false);
+    try {
+      const { error } = await supabase.from('blocked_users').insert({
+        blocker_id: currentUser.id,
+        blocked_id: convo.other_user.id,
+      });
+
+      if (error) throw error;
+      alert(`${targetName} 已被加入封鎖名單。`);
+    } catch (error) {
+      console.error('封鎖失敗:', error);
+      alert('封鎖失敗，請確認資料表存在或稍後再試。');
+    }
+  };
+
+  const handleOpenPrivacyAccess = async () => {
+    setMenuOpen(false);
+    try {
+      if (currentUser?.id && convo.other_user?.id) {
+        const { error } = await supabase.from('notifications').insert({
+          receiver_id: convo.other_user.id,
+          sender_id: currentUser.id,
+          type: 'album_request',
+        });
+        if (error) throw error;
+      }
+      alert('已向對方發送隱私相簿開放權限申請。');
+    } catch (error) {
+      console.error('開放權限失敗:', error);
+      alert('開放權限請求失敗，請稍後再試。');
+    }
+  };
+
+  const handleViewProfile = () => {
+    setMenuOpen(false);
+    setShowProfileModal(true);
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -239,17 +315,67 @@ export default function ChatRoom({ convo, onBack }: Props) {
           </div>
         </div>
         
-        <button
-          onClick={() => setVanishMode(!vanishMode)}
-          className={`p-1.5 rounded-full transition-all duration-300 ${
-            vanishMode
-              ? 'bg-pink-500/20 text-pink-400 shadow-[0_0_10px_rgba(236,72,153,0.3)]'
-              : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/80'
-          }`}
-          title="限時銷毀模式"
-        >
-          <Timer className="w-5 h-5" />
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setVanishMode(!vanishMode)}
+            className={`p-1.5 rounded-full transition-all duration-300 ${
+              vanishMode
+                ? 'bg-pink-500/20 text-pink-400 shadow-[0_0_10px_rgba(236,72,153,0.3)]'
+                : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/80'
+            }`}
+            title="限時銷毀模式"
+          >
+            <Timer className="w-5 h-5" />
+          </button>
+
+          <div className="relative ml-2 inline-block">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              className="p-1.5 rounded-full bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+              aria-label="開啟更多選單"
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-11 z-20 w-56 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
+                <button
+                  type="button"
+                  onClick={handleClearChat}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
+                >
+                  <Trash2 className="h-4 w-4 text-rose-400" />
+                  刪除訊息
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBlockUser}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
+                >
+                  <ShieldOff className="h-4 w-4 text-amber-400" />
+                  封鎖此人
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenPrivacyAccess}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
+                >
+                  <Lock className="h-4 w-4 text-violet-400" />
+                  開放權限(隱私相簿)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleViewProfile}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
+                >
+                  <UserSquare2 className="h-4 w-4 text-cyan-400" />
+                  查看個人檔案
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3 bg-[radial-gradient(circle_at_top,_rgba(124,58,237,0.08),_transparent_35%),linear-gradient(to_bottom,_rgba(15,23,42,0.95),_rgba(2,6,23,1))]">
@@ -263,6 +389,24 @@ export default function ChatRoom({ convo, onBack }: Props) {
         ))}
         <div ref={bottomRef} />
       </div>
+
+      {showProfileModal && (
+        <ProfileModal
+          user={{
+            id: convo.other_user?.id,
+            full_name: targetName,
+            avatar_url: targetAvatar,
+            age: '25',
+            status: 'online',
+            tribe: 'relationship',
+            bio: convo.other_user?.bio || '這個人目前還沒有留下更多介紹。',
+            distance: '< 100m',
+            isVIP: false,
+            isVerified: false,
+          }}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
 
       <div className="flex-shrink-0 bg-slate-950/95 backdrop-blur-xl border-t border-white/10 px-2 py-2 safe-area-bottom z-20 shadow-[0_-10px_20px_rgba(0,0,0,0.35)]">
         <div className="flex items-center gap-2">
