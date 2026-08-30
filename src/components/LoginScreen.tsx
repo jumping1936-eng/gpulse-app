@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Activity, Globe, Mail, ChevronDown, Loader2, X, MailCheck, ArrowLeft, RefreshCw, KeyRound, Lock, CheckCircle2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Activity, Mail, Loader2, X, MailCheck, ArrowLeft, KeyRound } from 'lucide-react';
 // ⚠️ 確保這裡的路徑與您的專案相符
 import { getLoginCopy } from '../i18n/loginTranslations';
 import { supabase } from '../supabaseClient'; 
@@ -18,9 +18,7 @@ interface Props {
 
 export default function LoginScreen({ onLogin }: Props) {
   // === 狀態管理 (保留您原有的所有狀態) ===
-  const [lang, setLang] = useState(LANGUAGES[0]);
-  const [showLangMenu, setShowLangMenu] = useState(false);
-  const langMenuRef = useRef<HTMLDivElement>(null);
+  const [lang] = useState(LANGUAGES[0]);
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,7 +31,7 @@ export default function LoginScreen({ onLogin }: Props) {
   // OTP 相關狀態
   const [isOtpPending, setIsOtpPending] = useState(false);
   const [otpCode, setOtpCode] = useState(''); 
-  const [resendCooldown, setResendCooldown] = useState(0);
+  void 0;
 
   // 忘記密碼相關狀態
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -88,8 +86,9 @@ export default function LoginScreen({ onLogin }: Props) {
         setAuthError('驗證成功，但無法取得登入狀態，請重新登入。');
         setIsOtpPending(false);
       }
-    } catch (err: any) {
-      setAuthError('系統發生錯誤：' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '未知錯誤';
+      setAuthError('系統發生錯誤：' + message);
     } finally {
       setLoading(false);
       setLoadingProvider(null);
@@ -111,7 +110,7 @@ export default function LoginScreen({ onLogin }: Props) {
         return;
       }
       try {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         
         if (signInError) {
           if (signInError.message.includes('Invalid login credentials')) {
@@ -138,8 +137,9 @@ export default function LoginScreen({ onLogin }: Props) {
           handleRememberMeStorage(); 
           onLogin();
         }
-      } catch (err: any) {
-        setAuthError('系統發生錯誤：' + err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : '未知錯誤';
+        setAuthError('系統發生錯誤：' + message);
       } finally {
         setLoading(false);
         setLoadingProvider(null);
@@ -156,8 +156,9 @@ export default function LoginScreen({ onLogin }: Props) {
         });
         
         if (error) throw error;
-      } catch (err: any) {
-        setAuthError(`Google 登入發生錯誤：` + err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : '未知錯誤';
+        setAuthError(`Google 登入發生錯誤：` + message);
         setLoading(false);
         setLoadingProvider(null);
       }
@@ -173,8 +174,9 @@ export default function LoginScreen({ onLogin }: Props) {
       const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail);
       if (error) setForgotError('發送失敗：' + error.message);
       else setForgotStep('otp'); 
-    } catch (err: any) {
-      setForgotError('系統發生錯誤：' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '未知錯誤';
+      setForgotError('系統發生錯誤：' + message);
     } finally {
       setForgotLoading(false);
     }
@@ -197,9 +199,10 @@ export default function LoginScreen({ onLogin }: Props) {
         localStorage.removeItem('gpulse_recovery_mode');
         setForgotError('驗證碼無效或已過期。(' + error.message + ')');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       localStorage.removeItem('gpulse_recovery_mode');
-      setForgotError('系統發生錯誤：' + err.message);
+      const message = err instanceof Error ? err.message : '未知錯誤';
+      setForgotError('系統發生錯誤：' + message);
     } finally {
       setForgotLoading(false);
     }

@@ -1,12 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { 
-  Camera, BadgeCheck, Crown, Loader2, Scan, Globe, EyeOff, 
-  ChevronRight, Settings, LogOut, Activity, Ghost, X, User, 
-  Calendar, MapPin, Heart, AlignLeft, Check, Ruler, Scale, 
-  VenetianMask, Instagram, Facebook, Twitter, Send, ShieldAlert, 
-  Download, Trash2, Lock, Plus, Image as ImageIcon, ShieldCheck,
-  UserX, HelpCircle, Mail, ChevronDown, AlertOctagon, MessageSquare, 
-  AlertTriangle, ImagePlus, MessageCircle, Ban // ✅ 總監新增：匯入 Ban 圖示給封鎖名單用
+import {
+  BadgeCheck, Crown, Loader2, Scan, EyeOff,
+  ChevronRight, Settings, LogOut, Ghost, X, Heart,
+  Check, Ruler, VenetianMask, Instagram, Facebook, Twitter, Send,
+  Download, Trash2, Lock, Image as ImageIcon, ShieldCheck,
+  Ban, MessageCircle, Plus, User, Calendar, Scale, AlignLeft,
+  Activity, UserX, MapPin, HelpCircle, MessageSquare, ShieldAlert,
+  AlertOctagon, ChevronDown, ImagePlus, AlertTriangle
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import * as nsfwjs from 'nsfwjs';
@@ -36,10 +36,12 @@ interface ProfileViewProps {
 
 export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const {
-    isVIP, setIsVIP, isVerified, setIsVerified,
-    myAvatar, setMyAvatar,
-    stealthMode, setStealthMode,
-    travelMode, setTravelMode,
+    isVIP,
+    isVerified,
+    myAvatar,
+    setMyAvatar,
+    stealthMode,
+    setStealthMode,
     setShowPaywall
   } = useApp();
 
@@ -195,7 +197,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
           }
         });
       }
-    } catch (error) {
+    } catch {
       alert('圖片處理失敗，請重試。');
       setIsAnalyzing(false);
     }
@@ -212,7 +214,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       } else {
         setReportAttachment(dataUrl);
       }
-    } catch (error) {
+    } catch {
       alert('圖片處理失敗');
     }
     if (target === 'contact' && contactFileRef.current) contactFileRef.current.value = '';

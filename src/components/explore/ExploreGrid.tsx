@@ -5,15 +5,27 @@ import { useApp } from '@/context/AppContext';
 import ProfileModal from './ProfileModal';
 
 // ✅ 1. 擴充 Props，接收來自上層 (ExploreTab) 的真實資料庫資料
+interface ProfileRow {
+  id: string;
+  full_name?: string;
+  avatar_url?: string;
+  bio?: string;
+  isVerified?: boolean;
+  isVIP?: boolean;
+  status?: string;
+  looking_for?: string;
+  tribe?: TribeType;
+}
+
 interface Props {
   activeTribe: TribeType;
-  profiles: any[]; 
-  myProfile: any | null; 
+  profiles: ProfileRow[]; 
+  myProfile: ProfileRow | null; 
 }
 
 export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props) {
   const { blockedUsers, isVerified, isVIP } = useApp();
-  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [selectedUser, setSelectedUser] = useState<ProfileRow | null>(null);
 
   // ✅ 2. 基於真實資料庫欄位進行過濾
   const filtered = profiles.filter(u => {
@@ -38,7 +50,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props)
     return gradients[index % gradients.length];
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name?: string) => {
     return name ? name.substring(0, 2).toUpperCase() : '??';
   };
 
@@ -49,7 +61,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props)
         {/* ========================================== */}
         {/* 自己的名片 (永遠固定在第一格，讀取真實 myProfile) */}
         {/* ========================================== */}
-        <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-800 border-2 border-violet-500/40 shadow-lg shadow-violet-500/10 cursor-pointer group">
+        <div className="relative aspect-square rounded-2xl overflow-hidden bg-slate-950 border-2 border-violet-500/50 shadow-lg shadow-violet-500/15 backdrop-blur-sm cursor-pointer group hover:shadow-violet-500/25 transition-all hover:scale-[1.02]">
           {myProfile?.avatar_url ? (
             <img src={myProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
           ) : (
@@ -65,10 +77,10 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props)
                 {myProfile?.full_name || '你'}
               </span>
               {isVerified && <BadgeCheck className="w-3 h-3 text-cyan-400" />}
-              {isVIP && <Crown className="w-3 h-3 text-amber-400" />}
+              {isVIP && <Crown className="w-3 h-3 text-amber-500" />}
             </div>
           </div>
-          <div className="absolute top-2 left-2 bg-violet-500/30 backdrop-blur-sm border border-violet-500/30 rounded-full px-2 py-0.5">
+          <div className="absolute top-2 left-2 bg-violet-600/40 backdrop-blur-xl border border-violet-500/40 rounded-full px-2 py-0.5">
             <span className="text-violet-300 text-[9px] font-bold">你自己</span>
           </div>
         </div>
@@ -80,7 +92,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props)
           <div
             key={user.id}
             onClick={() => setSelectedUser(user)}
-            className="relative aspect-square rounded-xl overflow-hidden bg-slate-800 cursor-pointer group hover:scale-[1.02] transition-transform duration-200"
+            className="relative aspect-square rounded-2xl overflow-hidden bg-slate-950 border border-white/10 backdrop-blur-sm cursor-pointer group hover:scale-[1.05] hover:border-violet-500/50 transition-all duration-200 hover:shadow-lg hover:shadow-violet-500/20"
           >
             {/* 頭像或漸層替代方案 */}
             {user.avatar_url ? (
@@ -101,7 +113,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props)
                 {/* 注意：真實資料庫使用的是 full_name */}
                 <span className="text-white text-xs font-semibold truncate">{user.full_name}</span>
                 {user.isVerified && <BadgeCheck className="w-3 h-3 text-cyan-400 flex-shrink-0" />}
-                {user.isVIP && <Crown className="w-3 h-3 text-amber-400 flex-shrink-0" />}
+                {user.isVIP && <Crown className="w-3 h-3 text-amber-500 flex-shrink-0" />}
               </div>
               {/* 若資料庫尚無 distance，預設顯示一段文字或空值 */}
               <p className="text-white/50 text-[9px]">{user.bio ? user.bio.substring(0, 10) + '...' : '< 100m'}</p>
@@ -109,7 +121,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile }: Props)
             
             {/* 真實的上線狀態指示器 (假設未來實作了 presence 功能) */}
             {user.status === 'online' && (
-              <div className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-800 shadow-sm" />
+              <div className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-950 shadow-lg shadow-emerald-400/20" />
             )}
           </div>
         ))}

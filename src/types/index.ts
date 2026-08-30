@@ -1,5 +1,5 @@
 export type AppState = 'safety-check' | 'blocked' | 'login' | 'legal' | 'app';
-export type Tab = 'explore' | 'chat' | 'inbox' | 'profile';
+export type Tab = 'home' | 'explore' | 'chat' | 'inbox' | 'profile';
 export type TribeType = 'all' | 'bear' | 'wolf' | 'otter' | 'twink' | 'jock' | 'chat' | 'relationship';
 
 // 保留原有的 User 介面供其他靜態畫面使用
@@ -49,14 +49,22 @@ export interface Message {
 // ✅ 總監修正：對齊 Supabase conversations 資料表，並加入關聯查詢的對方資料
 export interface Conversation {
   id: string;
-  created_at: string;
-  user1_id: string;
-  user2_id: string;
-  last_message: string;
-  last_message_time: string;
+  created_at?: string;
+  user1_id?: string;
+  user2_id?: string;
+  last_message?: string;
+  last_message_time?: string;
   // 透過 Join 撈取出來的對方真實資料
   other_user: DBProfile;
   unread?: number;
+
+  // compatibility for older mock / static code
+  user?: User;
+  lastMessage?: string;
+  lastTime?: string;
+  name?: string;
+  avatar?: string;
+  isOnline?: boolean;
 }
 
 export interface Notification {
@@ -82,6 +90,7 @@ export interface AppContextType {
   blockedUsers: Set<string>;
   blockUser: (id: string) => void;
   unreadInbox: number;
+  setUnreadInbox: (v: number) => void;
   unreadChat: number;
   setUnreadChat: (v: number) => void;
   showPaywall: boolean;

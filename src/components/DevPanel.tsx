@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bug, ShieldAlert, Crown, Globe, EyeOff, RefreshCw } from 'lucide-react';
+import { Bug, ShieldAlert, Crown, EyeOff, RefreshCw } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 interface Props {

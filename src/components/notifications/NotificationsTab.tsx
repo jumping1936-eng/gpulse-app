@@ -1,24 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Mail, Bell, UserPlus, Lock, Loader2, Inbox } from 'lucide-react';
+import { Heart, Mail, UserPlus, Lock, Loader2, Inbox } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
-
-const SYSTEM_NOTIFICATIONS = [
-  { id: 'sys-1', title: '完善你的檔案，獲得 3 倍瀏覽量', time: '1 天前', isRead: false },
-  { id: 'sys-2', title: 'VIP 春季特惠 —— 週末限時 5 折！', time: '2 天前', isRead: true },
-];
 
 export default function NotificationsTab() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'interaction' | 'system'>('interaction');
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Array<{
+    id: string;
+    type: string;
+    created_at: string;
+    sender?: { id?: string; full_name?: string; avatar_url?: string };
+  }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) fetchNotifications();
-  }, [user]);
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -28,13 +24,17 @@ export default function NotificationsTab() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (data) setNotifications(data);
+      if (data) setNotifications(data as Array<{ id: string; type: string; created_at: string; sender?: { id?: string; full_name?: string; avatar_url?: string } }>);
     } catch (err) {
       console.error("🔴 獲取通知失敗:", err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) fetchNotifications();
+  }, [user, fetchNotifications]);
 
   const getInitials = (name: string) => name ? name.substring(0, 2).toUpperCase() : '??';
   const getGradient = (id: string = '') => {
@@ -92,7 +92,8 @@ export default function NotificationsTab() {
             ) : (
               notifications.map((notif) => {
                 const sender = notif.sender || {};
-                
+                const senderName = typeof sender.full_name === 'string' ? sender.full_name : '神秘用戶';
+
                 // ✅ 根據不同 type 顯示不同文字與 Icon
                 let message = '傳送了通知';
                 let IconComponent = Heart;
@@ -108,7 +109,7 @@ export default function NotificationsTab() {
                       {sender.avatar_url ? (
                          <img src={sender.avatar_url} alt="avatar" className="w-full h-full object-cover" />
                       ) : (
-                         <span className="text-white font-bold tracking-tighter">{getInitials(sender.full_name)}</span>
+                         <span className="text-white font-bold tracking-tighter">{getInitials(senderName)}</span>
                       )}
                       <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-slate-900 flex items-center justify-center border-2 border-[#0B0C10] z-10">
                          <IconComponent className={`w-2.5 h-2.5 ${iconColor} fill-current`} />
@@ -116,7 +117,7 @@ export default function NotificationsTab() {
                     </div>
                     
                     <div className="flex flex-col flex-1">
-                      <span className="text-sm font-bold text-slate-200">{sender.full_name || '神秘用戶'}</span>
+                      <span className="text-sm font-bold text-slate-200">{senderName}</span>
                       <span className="text-xs text-slate-400 mt-0.5 line-clamp-1">{message}</span>
                     </div>
                     <span className="text-[10px] text-slate-500 shrink-0">{formatTimeAgo(notif.created_at)}</span>

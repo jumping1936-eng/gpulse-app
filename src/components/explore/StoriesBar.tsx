@@ -3,16 +3,22 @@ import { Plus } from 'lucide-react';
 // 移除了 STORY_USERS 的假資料依賴
 
 // ✅ 1. 擴充 Props，接收來自 ExploreTab 的真實資料
+interface StoryProfile {
+  id: string;
+  full_name?: string;
+  avatar_url?: string;
+}
+
 interface Props {
-  onViewStory: (user: any) => void;
-  profiles: any[];
-  myProfile: any | null;
+  onViewStory: (user: StoryProfile) => void;
+  profiles: StoryProfile[];
+  myProfile: StoryProfile | null;
 }
 
 export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) {
   const [viewedStories, setViewedStories] = useState<Set<string>>(new Set());
 
-  function handleView(user: any) {
+  function handleView(user: StoryProfile) {
     setViewedStories(prev => new Set([...prev, user.id]));
     onViewStory(user);
   }
@@ -28,7 +34,7 @@ export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) 
     return gradients[index % gradients.length];
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name?: string) => {
     return name ? name.substring(0, 2).toUpperCase() : '??';
   };
 

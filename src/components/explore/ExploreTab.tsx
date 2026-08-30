@@ -8,9 +8,16 @@ import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
+type StoryUser = {
+  id: string;
+  full_name?: string;
+  avatar_url?: string;
+  status?: string;
+};
+
 export default function ExploreTab() {
   const { user: authUser } = useAuth();
-  const [viewingStory, setViewingStory] = useState<User | null>(null);
+  const [viewingStory, setViewingStory] = useState<StoryUser | null>(null);
   const [activeTribe, setActiveTribe] = useState<TribeType>('all');
 
   // ✅ 真實資料庫狀態
@@ -19,13 +26,7 @@ export default function ExploreTab() {
   const [isLoading, setIsLoading] = useState(true);
 
   // 當使用者登入時，拉取真實名片資料
-  useEffect(() => {
-    if (authUser) {
-      fetchRealProfiles();
-    }
-  }, [authUser]);
-
-  const fetchRealProfiles = async () => {
+  const fetchRealProfiles = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -48,7 +49,13 @@ export default function ExploreTab() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [authUser]);
+
+  useEffect(() => {
+    if (authUser) {
+      fetchRealProfiles();
+    }
+  }, [authUser, fetchRealProfiles]);
 
   // 載入中畫面
   if (isLoading) {
@@ -60,7 +67,7 @@ export default function ExploreTab() {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-950 pb-24">
+    <div className="relative h-full overflow-y-auto bg-slate-950 pb-28">
       {/* 
         ✅ 將真實資料作為 props 傳遞給子元件。
         請注意：您必須同步修改 StoriesBar 與 ExploreGrid 的內部程式碼，

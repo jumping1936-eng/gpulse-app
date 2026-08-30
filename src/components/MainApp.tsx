@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Compass, MessageCircle, Bell, User, Ghost, Lock, KeyRound, Loader2 } from 'lucide-react';
+import { Home, Compass, MessageCircle, Bell, User, Ghost } from 'lucide-react';
 import { Tab, Conversation } from '@/types';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext'; 
 
+import HomeFeed from '@/components/home/HomeFeed';
 import ExploreTab from '@/components/explore/ExploreTab';
 import ChatList from '@/components/chat/ChatList';
 import ChatRoom from '@/components/chat/ChatRoom';
@@ -17,35 +18,82 @@ export default function MainApp() {
   const { stealthMode, unreadInbox, setUnreadInbox, unreadChat, setUnreadChat, showPaywall, setShowPaywall } = useApp();
   const { user: currentUser } = useAuth(); 
   
-  const [activeTab, setActiveTab] = useState<Tab>('explore');
+  const [activeTab, setActiveTab] = useState<Tab>('home');
   const [activeChatConvo, setActiveChatConvo] = useState<Conversation | null>(null);
   const [showBlockedUsers, setShowBlockedUsers] = useState(false);
 
   // ✅ 總監重構：透過 RPC 取得真實房間 ID 後再進行跳轉
   useEffect(() => {
-    const handleJumpToChat = async (e: any) => {
-      const targetUser = e.detail;
-      if (!currentUser) return;
+    const handleJumpToChat = async (e: Event & { detail?: { id?: string; other_user?: { id?: string } } }) => {
+      const targetUser = e.detail?.other_user || e.detail;
+      if (!currentUser || !targetUser?.id) return;
 
       try {
-        // 呼叫後端 RPC 取得或建立專屬房間 UUID
-        const { data: realRoomId, error } = await supabase.rpc('get_or_create_conversation', { other_id: targetUser.id });
-        if (error) throw error;
+        let realRoomId: string | null = null;
+
+        try {
+          const { data, error } = await supabase.rpc('get_or_create_conversation', { other_id: targetUser.id });
+          if (error) throw error;
+          realRoomId = typeof data === 'string' ? data : null;
+        } catch (rpcError) {
+          console.warn('RPC get_or_create_conversation 不可用，改為手動建立對話:', rpcError);
+
+          const { data: existingConvo, error: fetchErr } = await supabase
+            .from('conversations')
+            .select('*')
+            .or(`and(user1_id.eq.${currentUser.id},user2_id.eq.${targetUser.id}),and(user1_id.eq.${targetUser.id},user2_id.eq.${currentUser.id})`)
+            .limit(1)
+            .maybeSingle();
+
+          if (fetchErr && fetchErr.code !== 'PGRST116') throw fetchErr;
+
+          if (existingConvo) {
+            realRoomId = existingConvo.id;
+          } else {
+            const { data: createdConvo, error: insertErr } = await supabase
+              .from('conversations')
+              .insert({
+                user1_id: currentUser.id,
+                user2_id: targetUser.id,
+                last_message: '',
+                last_message_time: new Date().toISOString(),
+              })
+              .select('id')
+              .single();
+
+            if (insertErr) throw insertErr;
+            realRoomId = createdConvo.id;
+          }
+        }
+
+        const { data: convoData, error: convoError } = await supabase
+          .from('conversations')
+          .select(`
+            *,
+            user1:profiles!user1_id(id, full_name, avatar_url),
+            user2:profiles!user2_id(id, full_name, avatar_url)
+          `)
+          .eq('id', realRoomId)
+          .single();
+
+        if (convoError) throw convoError;
+
+        const otherUser = convoData.user1_id === currentUser.id ? convoData.user2 : convoData.user1;
 
         setActiveTab('chat');
         setActiveChatConvo({
-          id: realRoomId, // 🔴 注入真實的資料庫房間 UUID
-          name: targetUser.full_name || '神秘用戶',
-          avatar: targetUser.avatar_url || '',
-          lastMessage: '',
-          time: '現在',
+          id: convoData.id,
+          created_at: convoData.created_at,
+          user1_id: convoData.user1_id,
+          user2_id: convoData.user2_id,
+          last_message: convoData.last_message || '開始新的對話吧',
+          last_message_time: convoData.last_message_time || new Date().toISOString(),
           unread: 0,
-          isOnline: targetUser.status === 'online',
-          other_user: targetUser // 攜帶對方資訊供 ChatRoom 頭像使用
-        } as any);
+          other_user: (otherUser || targetUser) as Conversation['other_user'],
+        } as Conversation);
       } catch (err) {
-        console.error("🔴 無法建立聊天室:", err);
-        alert("建立聊天室連線失敗，請確認資料庫狀態。");
+        console.error('🔴 無法建立或讀取聊天室:', err);
+        alert('建立聊天室連線失敗，請確認資料庫狀態。');
       }
     };
 
@@ -58,7 +106,7 @@ export default function MainApp() {
     const notificationChannel = supabase
       .channel('realtime-notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `receiver_id=eq.${currentUser.id}` },
-        (payload) => {
+        () => {
           if (activeTab !== 'inbox') setUnreadInbox(unreadInbox + 1);
         }
       ).subscribe();
@@ -66,6 +114,7 @@ export default function MainApp() {
   }, [currentUser, activeTab, unreadInbox, setUnreadInbox]);
 
   const tabs = [
+    { id: 'home' as Tab, icon: Home, label: '首頁' },
     { id: 'explore' as Tab, icon: Compass, label: '探索' },
     { id: 'chat' as Tab, icon: MessageCircle, label: '聊天', badge: unreadChat },
     { id: 'inbox' as Tab, icon: Bell, label: '通知', badge: unreadInbox },
@@ -82,6 +131,7 @@ export default function MainApp() {
       )}
 
       <div className="flex-1 overflow-hidden relative">
+        {activeTab === 'home' && <HomeFeed />}
         {activeTab === 'explore' && <ExploreTab />}
         {activeTab === 'chat' && !activeChatConvo && <ChatList onOpenConvo={setActiveChatConvo} />}
         {activeTab === 'chat' && activeChatConvo && <ChatRoom convo={activeChatConvo} onBack={() => setActiveChatConvo(null)} />}

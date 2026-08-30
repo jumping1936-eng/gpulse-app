@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { X, Heart, MessageCircle } from 'lucide-react';
 
+interface StoryUser {
+  id: string;
+  full_name?: string;
+  avatar_url?: string;
+  status?: string;
+}
+
 interface Props {
-  user: any; // 接收真實的 Supabase User 物件
+  user: StoryUser;
   onClose: () => void;
 }
 
@@ -35,12 +42,12 @@ export default function StoryViewer({ user, onClose }: Props) {
     }, 50);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [onClose, totalSlides]);
 
   const slide = STORY_SLIDES[currentSlide];
 
   // ✅ 動態運算缺乏頭像時的替代視覺
-  const getInitials = (name: string) => name ? name.substring(0, 2).toUpperCase() : '??';
+  const getInitials = (name?: string) => name ? name.substring(0, 2).toUpperCase() : '??';
   const getGradient = (id: string = '') => {
     const gradients = ['from-blue-600 to-violet-600', 'from-orange-500 to-red-600', 'from-emerald-500 to-teal-700', 'from-pink-500 to-rose-600'];
     const charCode = id.charCodeAt(0) || 0;

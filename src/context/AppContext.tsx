@@ -1,23 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import type { AppContextType } from '@/types';
 
-// 1. 定義全域狀態的 TypeScript 型別
-export interface AppContextType {
-  stealthMode: boolean;
-  setStealthMode: (val: boolean) => void;
-  unreadInbox: number;
-  setUnreadInbox: (val: number) => void;
-  unreadChat: number;
-  setUnreadChat: (val: number) => void;
-  showPaywall: boolean;
-  setShowPaywall: (val: boolean) => void;
-  blockedUsers: Set<string>;
-  blockUser: (id: string) => void;
-  isVerified: boolean;
-  isVIP: boolean;
-  myAvatar: string;
-}
-
-// ✅ 2. 建立 Context (加上 export，完美解決 App.tsx 報錯)
+// ✅ 2. 建立 Context
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // 3. 建立 Provider 統一管理所有跨元件的狀態
@@ -27,13 +11,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [unreadChat, setUnreadChat] = useState(0);
   const [showPaywall, setShowPaywall] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
-  
-  // 靜態資料（可依據您未來的需求，改由 Supabase 讀取真實資料）
-  const [isVerified] = useState(false); 
-  const [isVIP] = useState(false);      
-  const [myAvatar] = useState('');      
+  const [travelMode, setTravelMode] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
+  const [isVIP, setIsVIP] = useState(false);
+  const [myAvatar, setMyAvatar] = useState<string | null>(null);
 
-  // 封鎖用戶邏輯：將 ID 加入 Set 中
   const blockUser = (id: string) => {
     setBlockedUsers(prev => {
       const next = new Set(prev);
@@ -51,7 +33,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         unreadChat, setUnreadChat,
         showPaywall, setShowPaywall,
         blockedUsers, blockUser,
-        isVerified, isVIP, myAvatar
+        isVerified, setIsVerified,
+        isVIP, setIsVIP,
+        myAvatar, setMyAvatar,
+        travelMode, setTravelMode,
+        simulateBlocked: false,
+        setSimulateBlocked: () => undefined,
       }}
     >
       {children}

@@ -30,7 +30,7 @@ function AppContent() {
   const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
   
   // ✅ 總監修正：預設未讀歸零，避免幽靈紅點
-  const [unreadInbox] = useState(0);
+  const [unreadInbox, setUnreadInbox] = useState(0);
   const [unreadChat, setUnreadChat] = useState(0);
   
   const [showPaywall, setShowPaywall] = useState(false);
@@ -39,7 +39,7 @@ function AppContent() {
   // 資料庫連線測試
   useEffect(() => {
     const testConnection = async () => {
-      const { data, error } = await supabase.from('profiles').select('*').limit(1);
+      const { error } = await supabase.from('profiles').select('*').limit(1);
       if (error) {
         console.error("❌ 連線失敗，請檢查金鑰或網路：", error.message);
       } else {
@@ -84,7 +84,8 @@ function AppContent() {
     stealthMode, setStealthMode,
     travelMode, setTravelMode,
     blockedUsers, blockUser,
-    unreadInbox, unreadChat, setUnreadChat,
+    unreadInbox, setUnreadInbox,
+    unreadChat, setUnreadChat,
     showPaywall, setShowPaywall,
     simulateBlocked, setSimulateBlocked,
   };
