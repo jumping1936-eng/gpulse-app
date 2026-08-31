@@ -9,8 +9,8 @@ export interface User {
   id: string;
   name: string;
   age: number;
-  tribe: TribeType;
-  distance: string;
+  tribe?: TribeType;
+  distance?: string;
   gradientFrom: string;
   gradientTo: string;
   initials: string;
@@ -19,11 +19,11 @@ export interface User {
   hasStory: boolean;
   storyViewed: boolean;
   bio: string;
-  height: string;
-  role: string;
-  lookingFor: string;
-  lastSeen: string;
-  bodyType: string;
+  height?: string;
+  role?: string;
+  lookingFor?: string;
+  lastSeen?: string;
+  bodyType?: string;
 }
 
 // ✅ 總監新增：對應資料庫的真實個人檔案
@@ -90,7 +90,8 @@ export interface AppContextType {
   travelMode: boolean;
   setTravelMode: (v: boolean) => void;
   blockedUsers: Set<string>;
-  blockUser: (id: string) => void;
+  blockUser: (id: string) => Promise<void>;
+  unblockUser: (id: string) => Promise<void>;
   unreadInbox: number;
   setUnreadInbox: Dispatch<SetStateAction<number>>;
   unreadChat: number;
