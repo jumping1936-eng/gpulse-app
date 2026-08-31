@@ -45,7 +45,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     setStealthMode,
     travelMode,
     setTravelMode,
-    setShowPaywall
+    setShowPaywall,
+    setIsVIP
   } = useApp();
   const { user } = useAuth();
 
@@ -53,6 +54,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const contactFileRef = useRef<HTMLInputElement>(null);
   const reportFileRef = useRef<HTMLInputElement>(null);
+  const loadProfileRunId = useRef(0);
 
   // AI 內容安全審核狀態
   const [nsfwModel, setNsfwModel] = useState<nsfwjs.NSFWJS | null>(null);
@@ -76,51 +78,25 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   // 核心領域模型 (Domain Models)
   // ==========================================
   const [profile, setProfile] = useState({
-    name: '你',
-    age: '25',
-    location: '台北',
-    height: '178',
-    weight: '70',
-    role: ['互補'],
-    tribe: 'wolf', 
-    bio: '熱愛探索新事物，週末喜歡去咖啡廳待上一整天。在這裡尋找有趣的靈魂！',
-    lookingFor: ['約會', '交友'],
+    name: '',
+    age: '',
+    location: '',
+    height: '',
+    weight: '',
+    role: [] as string[],
+    tribe: '',
+    bio: '',
+    lookingFor: [] as string[],
     telegram: '',
-    twitter: '', 
+    twitter: '',
     facebook: '',
     instagram: '',
     hideDistance: false,
-    publicPhotos: myAvatar ? [myAvatar] : [], 
-    privatePhotos: [] as string[],            
+    publicPhotos: [] as string[],
+    privatePhotos: [] as string[],
   });
 
-  const [accessRequests, setAccessRequests] = useState([
-    { id: 'u1', name: 'Alice', status: 'pending', avatar: 'https://i.pravatar.cc/150?u=a' },
-    { id: 'u2', name: 'Bob', status: 'granted', avatar: 'https://i.pravatar.cc/150?u=b' },
-    { id: 'u3', name: 'Charlie', status: 'granted', avatar: 'https://i.pravatar.cc/150?u=c' },
-  ]);
-
-  const loadPrivatePhotoAccessRequests = async () => {
-    if (!user?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('private_photo_access')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (error && error.code !== 'PGRST116') throw error;
-
-      const accessList = Array.isArray(data?.private_photo_access) ? data.private_photo_access : [];
-      setAccessRequests(accessList.length ? accessList : [
-        { id: 'u1', name: 'Alice', status: 'pending', avatar: 'https://i.pravatar.cc/150?u=a' },
-        { id: 'u2', name: 'Bob', status: 'granted', avatar: 'https://i.pravatar.cc/150?u=b' },
-      ]);
-    } catch (error) {
-      console.error('載入私密相簿權限請求失敗:', error);
-    }
-  };
+  const [accessRequests, setAccessRequests] = useState<{ id: string; name: string; status: 'pending' | 'granted'; avatar: string }[]>([]);
 
   const [notifications, setNotifications] = useState({
     newMatch: true,
@@ -162,82 +138,53 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const normalizeNotificationPrefs = (value: any) => ({
-    newMatch: Boolean(value?.newMatch ?? value?.new_match ?? true),
-    newMessage: Boolean(value?.newMessage ?? value?.new_message ?? true),
-    profileLike: Boolean(value?.profileLike ?? value?.profile_like ?? false),
-    appUpdates: Boolean(value?.appUpdates ?? value?.app_updates ?? true),
-    emailPromo: Boolean(value?.emailPromo ?? value?.email_promo ?? false),
-  });
-
-  const buildProfilePayload = (nextProfile: typeof profile, nextNotifications: typeof notifications) => ({
-    full_name: nextProfile.name,
-    age: Number(nextProfile.age) || null,
-    location: nextProfile.location,
-    bio: nextProfile.bio,
-    height: nextProfile.height ? Number(nextProfile.height) : null,
-    weight: nextProfile.weight ? Number(nextProfile.weight) : null,
-    role: nextProfile.role,
-    tribe: nextProfile.tribe,
-    looking_for: nextProfile.lookingFor,
-    instagram: nextProfile.instagram,
-    facebook: nextProfile.facebook,
-    twitter: nextProfile.twitter,
-    telegram: nextProfile.telegram,
-    hide_distance: nextProfile.hideDistance,
-    stealth_mode: stealthMode,
-    travel_mode: travelMode,
-    undo_skip: undoSkip,
-    notification_prefs: nextNotifications,
-    push_enabled: nextNotifications.newMatch || nextNotifications.newMessage || nextNotifications.appUpdates || nextNotifications.profileLike || nextNotifications.emailPromo,
+  const buildProfilePayload = () => ({
+    full_name: profile.name,
+    age: Number(profile.age) || null,
+    location: profile.location,
+    bio: profile.bio,
+    height: profile.height ? Number(profile.height) : null,
+    weight: profile.weight ? Number(profile.weight) : null,
+    role: profile.role,
+    tribe: profile.tribe,
+    looking_for: profile.lookingFor,
+    hide_distance: profile.hideDistance,
     avatar_url: myAvatar,
-    is_vip: isVIP,
   });
 
-  const persistProfileUpdate = async (nextProfile: typeof profile, nextNotifications: typeof notifications) => {
+  const persistProfileUpdate = async () => {
     if (!user?.id) return;
 
-    const payload = buildProfilePayload(nextProfile, nextNotifications);
+    const payload = buildProfilePayload();
     const { error } = await supabase.from('profiles').update(payload).eq('id', user.id);
     if (error) {
       throw error;
     }
   };
 
-  const persistVipToggle = async (field: 'stealth_mode' | 'travel_mode' | 'hide_distance' | 'undo_skip', value: boolean) => {
+  const persistVipToggle = async (field: 'hide_distance', value: boolean) => {
     if (!user?.id) return;
     const { error } = await supabase.from('profiles').update({ [field]: value }).eq('id', user.id);
     if (error) throw error;
   };
 
   const toggleSetting = async (key: keyof typeof notifications, nextValue: boolean) => {
-    const previous = notifications[key];
+    if (!user?.id) return;
     setNotifications((prev) => ({ ...prev, [key]: nextValue }));
-
-    try {
-      const nextPrefs = { ...notifications, [key]: nextValue };
-      const profilePayload = { notification_prefs: nextPrefs, push_enabled: nextPrefs.newMatch || nextPrefs.newMessage || nextPrefs.appUpdates || nextPrefs.profileLike || nextPrefs.emailPromo };
-
-      const { error } = await supabase.from('profiles').update(profilePayload).eq('id', user?.id ?? '');
-      if (error) {
-        setNotifications((prev) => ({ ...prev, [key]: previous }));
-        throw error;
-      }
-    } catch (error) {
-      console.error('通知設定更新失敗:', error);
-      setNotifications((prev) => ({ ...prev, [key]: previous }));
-      alert('通知設定更新失敗，已還原上一個狀態。');
-    }
   };
 
   useEffect(() => {
+    let isMounted = true;
+    const currentRunId = ++loadProfileRunId.current;
+
     const loadProfileFromDb = async () => {
       if (!user?.id) return;
 
       try {
         const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
         if (error) throw error;
-        if (!data) return;
+        if (!data || !isMounted) return;
+        if (currentRunId !== loadProfileRunId.current) return;
 
         const nextProfile = {
           name: data.full_name ?? data.name ?? '你',
@@ -253,30 +200,35 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
           twitter: data.twitter ?? '',
           facebook: data.facebook ?? '',
           instagram: data.instagram ?? '',
-          hideDistance: Boolean(data.hide_distance ?? data.hideDistance ?? false),
+          hideDistance: Boolean(data.hide_distance ?? false),
           publicPhotos: Array.isArray(data.public_photos) ? data.public_photos : (data.avatar_url ? [data.avatar_url] : []),
           privatePhotos: Array.isArray(data.private_photos) ? data.private_photos : [],
         };
 
         setProfile(nextProfile);
         setEditForm(nextProfile);
-        setNotifications(normalizeNotificationPrefs(data.notification_prefs ?? data.push_settings ?? {}));
-        setUndoSkip(Boolean(data.undo_skip ?? false));
-        setStealthMode(Boolean(data.stealth_mode ?? false));
-        setTravelMode(Boolean(data.travel_mode ?? false));
-        if (typeof data.is_vip === 'boolean') {
-          if (data.is_vip !== isVIP) {
-            // leave the app context value in sync when the DB says the user is VIP
-          }
+        if (typeof data.is_vip === 'boolean' && data.is_vip !== isVIP) {
+          setIsVIP(data.is_vip);
+        }
+        if (data.avatar_url) {
+          setMyAvatar(data.avatar_url);
+        } else if (Array.isArray(data.public_photos) && data.public_photos[0]) {
+          setMyAvatar(data.public_photos[0]);
         }
       } catch (error) {
-        console.error('載入個人檔案失敗:', error);
+        if (isMounted) {
+          console.error('載入個人檔案失敗:', error);
+        }
       }
     };
 
     loadProfileFromDb();
-    loadPrivatePhotoAccessRequests();
-  }, [user?.id, setStealthMode, setTravelMode]);
+
+    return () => {
+      isMounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // ==========================================
   // 業務邏輯：檔案轉換與 AI 審核
@@ -295,14 +247,29 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     return new Promise((resolve) => {
       const img = new Image();
       img.src = dataUrl;
-      img.onload = async () => {
+      const timer = setTimeout(async () => {
         try {
-          const predictions = await nsfwModel.classify(img);
-          const isUnsafe = predictions.some(p => 
-            (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.6
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          }
+          const predictions = await nsfwModel.classify(canvas);
+          const isUnsafe = predictions.some(
+            (p: { className: string; probability: number }) =>
+              (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.6
           );
           resolve(!isUnsafe);
-        } catch { resolve(true); }
+        } catch {
+          resolve(true);
+        }
+      }, 0);
+      img.onload = () => clearTimeout(timer);
+      img.onerror = () => {
+        clearTimeout(timer);
+        resolve(true);
       };
     });
   };
@@ -390,43 +357,10 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   };
 
   const handleAccessAction = async (userId: string, action: 'granted' | 'rejected' | 'revoked') => {
-    if (!user?.id) return;
-
-    try {
-      const { data, error: loadError } = await supabase
-        .from('profiles')
-        .select('private_photo_access')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (loadError && loadError.code !== 'PGRST116') throw loadError;
-
-      const existing = Array.isArray(data?.private_photo_access) ? data.private_photo_access : [];
-      const nextEntries = existing.filter((entry: any) => entry?.id !== userId);
-
-      if (action === 'granted') {
-        const matched = accessRequests.find((req) => req.id === userId);
-        if (matched) {
-          nextEntries.push({ id: matched.id, name: matched.name, status: 'granted', avatar: matched.avatar });
-        }
-      }
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({ private_photo_access: nextEntries })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      setAccessRequests((prev) => {
-        if (action === 'revoked' || action === 'rejected') return prev.filter(req => req.id !== userId);
-        return prev.map(req => req.id === userId ? { ...req, status: action } : req);
-      });
-    } catch (error) {
-      console.error('更新私密相簿權限失敗:', error);
-      alert('更新私密相簿權限失敗，請稍後再試。');
-      loadPrivatePhotoAccessRequests();
-    }
+    setAccessRequests((prev) => {
+      if (action === 'revoked' || action === 'rejected') return prev.filter(req => req.id !== userId);
+      return prev.map(req => req.id === userId ? { ...req, status: action } : req);
+    });
   };
 
   // ✅ 總監升級：將函數改為 async 以支援後端非同步登出
@@ -468,7 +402,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     if (nextProfile.publicPhotos.length > 0) setMyAvatar(nextProfile.publicPhotos[0]);
 
     try {
-      await persistProfileUpdate(nextProfile, notifications);
+      await persistProfileUpdate();
       setIsEditModalOpen(false);
     } catch (error) {
       console.error('儲存個人檔案失敗:', error);
@@ -482,9 +416,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     if (!window.confirm("🚨 警告：確定要刪除帳號嗎？\n此操作將清除您目前的所有資料。")) return;
     if (!window.confirm("⚠️ 再次確認：\n您的所有配對紀錄、對話與相片將永遠無法復原。確定要繼續嗎？")) return;
     if (!window.confirm("⛔ 最後警告：\n一旦刪除，【三個月內將無法以同一登入方式再申請帳號】！\n\n您真的確定要永久刪除嗎？")) return;
-    
-    alert("✅ 帳號已永久刪除，系統即將為您返回首頁。");
-    window.location.href = '/'; 
   }
 
   const handleDownloadData = () => {
@@ -534,7 +465,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
   const submitReportForm = () => {
     if(!reportFormState.details.trim()) return alert("請描述詳細情況，以便我們的團隊進行調查！");
-    alert("🚨 檢舉已成功立案！感謝您提供的資訊與截圖，我們的信任與安全團隊會立即介入審查。");
     setReportFormState({ isOpen: false, reason: '', details: '' });
     setReportAttachment(null);
   };
@@ -559,34 +489,25 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       return;
     }
 
-    const previousStealth = stealthMode;
     const previousHideDistance = profile.hideDistance;
-    const previousTravel = travelMode;
-    const previousUndoSkip = undoSkip;
 
     try {
-      if (type === 'stealth') {
-        setStealthMode(nextValue);
-        await persistVipToggle('stealth_mode', nextValue);
-      }
-      if (type === 'travel') {
-        setTravelMode(nextValue);
-        await persistVipToggle('travel_mode', nextValue);
-      }
       if (type === 'hideDistance') {
         setProfile((prev) => ({ ...prev, hideDistance: nextValue }));
         await persistVipToggle('hide_distance', nextValue);
       }
+      if (type === 'stealth') {
+        setStealthMode(nextValue);
+      }
+      if (type === 'travel') {
+        setTravelMode(nextValue);
+      }
       if (type === 'undoSkip') {
         setUndoSkip(nextValue);
-        await persistVipToggle('undo_skip', nextValue);
       }
     } catch (error) {
       console.error('VIP 設定更新失敗:', error);
-      setStealthMode(previousStealth);
       setProfile((prev) => ({ ...prev, hideDistance: previousHideDistance }));
-      setTravelMode(previousTravel);
-      setUndoSkip(previousUndoSkip);
       alert('VIP 設定更新失敗，已回復上一個狀態。');
     }
   };
