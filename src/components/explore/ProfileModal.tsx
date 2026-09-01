@@ -30,67 +30,28 @@ export default function ProfileModal({ user, onClose }: Props) {
   const { blockUser } = useApp();
   const { user: currentUser } = useAuth();
   
-  const [liked, setLiked] = useState(false);
-  const [hasLikedToday, setHasLikedToday] = useState(false);
-  const [isBoosting, setIsBoosting] = useState(false);
-  const [hasBoostedToday, setHasBoostedToday] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [showPrivateAlbum, setShowPrivateAlbum] = useState(false);
 
-  function handleBlock() {
-    if (!user?.id) return;
-    blockUser(user.id);
-    onClose();
-  }
-
-  async function handleLike() {
-    // ✅ 前端 mock 邏輯：保留未來 Supabase RPC 串接空間
-    if (liked || hasLikedToday) {
-      alert('24小時內只能點擊一次');
+  async function handleBlock() {
+    if (!user?.id || !currentUser?.id) return;
+    if (user.id === currentUser.id) {
+      alert('你無法封鎖自己。');
       return;
     }
-
     try {
-      // TODO: 未來請替換為 supabase.rpc('send_like_with_cooldown', { target_id: user?.id })
-      // const { data: success, error } = await supabase.rpc('send_like_with_cooldown', { target_id: user?.id });
-      // if (error) throw error;
-      // if (!success) {
-      //   alert('⏳ 24小時內只能對同一個人發送一次心動喔！');
-      //   return;
-      // }
-
-      setLiked(true);
-      setHasLikedToday(true);
-      alert('已送出心動，24 小時內只能點擊一次');
-    } catch (error: unknown) {
-      console.error("🔴 發送心動失敗:", error);
-      const message = error instanceof Error ? error.message : '未知錯誤';
-      alert(`心動發送失敗：${message}`);
+      await blockUser(user.id);
+      onClose();
+    } catch (error) {
+      console.error('封鎖失敗:', error);
+      alert('封鎖失敗，請稍後再試。');
     }
   }
 
-  async function handleBoost() {
-    // ✅ 前端 mock 邏輯：保留未來 Supabase RPC 串接空間
-    if (isBoosting || hasBoostedToday) {
-      alert('24小時內只能點擊一次');
-      return;
-    }
+  function handleLike() {
+  }
 
-    setIsBoosting(true);
-    try {
-      // TODO: 未來請替換為 supabase.rpc('boost_user_profile', { target_id: user?.id })
-      // const { error } = await supabase.rpc('boost_user_profile', { target_id: user?.id });
-      // if (error) throw error;
-
-      setHasBoostedToday(true);
-      alert(`🚀 成功推送 ${user?.full_name}！他的本日排名已上升！`);
-    } catch (error: unknown) {
-      console.error("🔴 推送失敗:", error);
-      const message = error instanceof Error ? error.message : '未知錯誤';
-      alert(`推送失敗：${message}`);
-    } finally {
-      setIsBoosting(false);
-    }
+  function handleBoost() {
   }
 
   async function handleRequestAlbum() {
@@ -215,19 +176,19 @@ export default function ProfileModal({ user, onClose }: Props) {
           <div className="flex gap-2">
             <button
               onClick={handleLike}
-              disabled={liked || hasLikedToday}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 pointer-events-auto transform ${liked || hasLikedToday ? 'bg-pink-500/20 border border-pink-500/40 text-pink-400 shadow-lg shadow-pink-500/10 opacity-60 scale-[0.98]' : 'bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 hover:scale-[1.02] active:scale-95'}`}
+              disabled
+              className="flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 pointer-events-auto transform opacity-50 cursor-not-allowed bg-pink-500/20 border border-pink-500/40 text-pink-400 shadow-lg shadow-pink-500/10 scale-[0.98]"
             >
-              <Heart className={`w-5 h-5 transition-all duration-200 ${liked || hasLikedToday ? 'fill-pink-400 scale-110' : 'group-hover:scale-110'}`} />
-              {liked || hasLikedToday ? '已發送' : '心動'}
+              <Heart className="w-5 h-5 transition-all duration-200 fill-pink-400 scale-110" />
+              已發送
             </button>
             <button
               onClick={handleBoost}
-              disabled={isBoosting || hasBoostedToday}
-              className={`flex-[1.2] flex flex-col items-center justify-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white py-3 rounded-2xl font-bold text-xs transition-all duration-200 shadow-lg shadow-orange-500/20 border border-amber-300/30 pointer-events-auto disabled:opacity-60 ${isBoosting ? 'scale-[1.03] shadow-orange-500/35' : 'hover:scale-[1.02] active:scale-95'}`}
+              disabled
+              className="flex-[1.2] flex flex-col items-center justify-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 rounded-2xl font-bold text-xs transition-all duration-200 shadow-lg shadow-orange-500/20 border border-amber-300/30 pointer-events-auto opacity-50 cursor-not-allowed"
             >
-              <Rocket className={`w-5 h-5 transition-all duration-200 ${isBoosting ? 'animate-bounce scale-110' : ''}`} />
-              {hasBoostedToday ? '已推送' : '推送排名'}
+              <Rocket className="w-5 h-5 transition-all duration-200" />
+              已推送
             </button>
             <button onClick={handleMessage} className="flex-1 flex flex-col items-center justify-center gap-1 bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 hover:scale-[1.02] active:scale-95 pointer-events-auto">
               <MessageCircle className="w-5 h-5"/>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Send, ImageIcon, User as UserIcon, Timer, Check, CheckCheck, Flame, MoreVertical, ShieldOff, Lock, UserSquare2, Trash2, Bell } from 'lucide-react';
+import { ArrowLeft, Send, ImageIcon, User as UserIcon, Timer, Check, CheckCheck, Flame, MoreVertical, ShieldOff, Lock, UserSquare2, Trash2 } from 'lucide-react';
 import { Conversation, Message } from '@/types';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
@@ -29,14 +29,19 @@ const MessageBubble = ({
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          onSelfDestruct(msg.id); 
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [msg.is_vanish, msg.id, onSelfDestruct]);
+  }, [msg.is_vanish, msg.id]);
+
+  useEffect(() => {
+    if (timeLeft === 0 && msg.is_vanish) {
+      onSelfDestruct(msg.id);
+    }
+  }, [timeLeft, msg.is_vanish, msg.id, onSelfDestruct]);
 
   return (
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
@@ -77,7 +82,7 @@ const MessageBubble = ({
 
 export default function ChatRoom({ convo, onBack }: Props) {
   const { user: currentUser } = useAuth();
-  const { setUnreadChat } = useApp();
+  const { setUnreadChat, blockUser, blockedUsers } = useApp();
   const myId = currentUser?.id;
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -85,9 +90,25 @@ export default function ChatRoom({ convo, onBack }: Props) {
   const [vanishMode, setVanishMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileModalData, setProfileModalData] = useState<{
+    id?: string;
+    full_name?: string;
+    avatar_url?: string;
+    age?: string;
+    status?: string;
+    tribe?: string;
+    bio?: string;
+    height?: string;
+    role?: string;
+    looking_for?: string;
+    distance?: string;
+    isVIP?: boolean;
+    isVerified?: boolean;
+  } | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatRoomChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const targetName = convo.other_user?.full_name || convo.name || '無名探索者';
   const targetAvatar = convo.other_user?.avatar_url || convo.avatar || '';
@@ -112,14 +133,27 @@ export default function ChatRoom({ convo, onBack }: Props) {
   }, [convo.id, myId]);
 
   const setupRealtime = useCallback(() => {
-    supabase.channel(`room:${convo.id}`)
+    if (!convo.id) return;
+
+    if (chatRoomChannel.current) {
+      supabase.removeChannel(chatRoomChannel.current);
+      chatRoomChannel.current = null;
+    }
+
+    const roomChannel = supabase.channel(`chat-room:${convo.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convo.id}` }, (payload) => {
         const newMsg = payload.new as Message & { is_hidden?: boolean };
         if (newMsg.is_hidden) return;
 
         setMessages(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
         if (newMsg.sender_id !== myId) {
-          supabase.from('messages').update({ is_read: true }).eq('id', newMsg.id).then();
+          (async () => {
+            try {
+              await supabase.from('messages').update({ is_read: true }).eq('id', newMsg.id);
+            } catch (markReadError) {
+              console.error('🔴 自動標示已讀失敗:', markReadError);
+            }
+          })();
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convo.id}` }, (payload) => {
@@ -128,8 +162,10 @@ export default function ChatRoom({ convo, onBack }: Props) {
         } else {
           setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m));
         }
-      })
-      .subscribe();
+      });
+
+    roomChannel.subscribe();
+    chatRoomChannel.current = roomChannel;
   }, [convo.id, myId]);
 
   useEffect(() => {
@@ -142,7 +178,10 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
     return () => {
       setUnreadChat(0);
-      supabase.removeAllChannels();
+      if (chatRoomChannel.current) {
+        supabase.removeChannel(chatRoomChannel.current);
+        chatRoomChannel.current = null;
+      }
     };
   }, [convo?.id, myId, fetchMessagesAndMarkRead, setupRealtime, setUnreadChat]);
 
@@ -150,6 +189,11 @@ export default function ChatRoom({ convo, onBack }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (convo.other_user?.id && blockedUsers.has(convo.other_user.id)) {
+      onBack();
+    }
+  }, [blockedUsers, convo.other_user?.id, onBack]);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -157,7 +201,30 @@ export default function ChatRoom({ convo, onBack }: Props) {
       alert("⚠️ 無法獲取您的用戶身份，請重新登入！");
       return;
     }
-    
+
+    if (blockedUsers.has(convo.other_user?.id)) {
+      alert('你已封鎖此使用者，無法發送訊息。');
+      return;
+    }
+
+    try {
+      const { data: blockedByOther, error: blockError } = await supabase
+        .from('blocks')
+        .select('id')
+        .eq('blocker_id', convo.other_user.id)
+        .eq('blocked_id', myId)
+        .maybeSingle();
+
+      if (blockError && blockError.code !== 'PGRST116') throw blockError;
+
+      if (blockedByOther) {
+        alert('對方已封鎖你，無法發送訊息。');
+        return;
+      }
+    } catch (err) {
+      console.error('檢查封鎖狀態失敗:', err);
+    }
+
     const content = input.trim();
     setInput('');
 
@@ -179,10 +246,14 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
       setMessages(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
 
-      await supabase.from('conversations').update({
-        last_message: vanishMode ? '🔥 [限時私密訊息]' : content,
-        last_message_time: new Date().toISOString()
-      }).eq('id', convo.id);
+      try {
+        await supabase.from('conversations').update({
+          last_message: vanishMode ? '🔥 [限時私密訊息]' : content,
+          last_message_time: new Date().toISOString()
+        }).eq('id', convo.id);
+      } catch (convoError) {
+        console.error('🔴 更新對話預覽失敗:', convoError);
+      }
     } catch (error) {
       console.error('🔴 傳送訊息失敗:', error);
     }
@@ -223,13 +294,9 @@ export default function ChatRoom({ convo, onBack }: Props) {
     if (!currentUser?.id || !convo.other_user?.id) return;
     setMenuOpen(false);
     try {
-      const { error } = await supabase.from('blocked_users').insert({
-        blocker_id: currentUser.id,
-        blocked_id: convo.other_user.id,
-      });
-
-      if (error) throw error;
+      await blockUser(convo.other_user.id);
       alert(`${targetName} 已被加入封鎖名單。`);
+      onBack();
     } catch (error) {
       console.error('封鎖失敗:', error);
       alert('封鎖失敗，請確認資料表存在或稍後再試。');
@@ -254,9 +321,48 @@ export default function ChatRoom({ convo, onBack }: Props) {
     }
   };
 
-  const handleViewProfile = () => {
+  const handleViewProfile = async () => {
     setMenuOpen(false);
-    setShowProfileModal(true);
+    if (!convo.other_user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', convo.other_user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return;
+
+      setShowProfileModal(true);
+      setProfileModalData({
+        id: data.id,
+        full_name: data.full_name ?? targetName,
+        avatar_url: data.avatar_url ?? targetAvatar,
+        age: typeof data.age === 'number' ? String(data.age) : undefined,
+        status: typeof data.status === 'string' ? data.status : undefined,
+        tribe: data.tribe,
+        bio: data.bio,
+        height: typeof data.height === 'number' ? String(data.height) : undefined,
+        role: Array.isArray(data.role) ? data.role.join(', ') : data.role,
+        looking_for: Array.isArray(data.looking_for) ? data.looking_for.join(', ') : data.looking_for,
+        distance: undefined,
+        isVIP: data.is_vip,
+        isVerified: data.is_vip,
+      });
+    } catch {
+      setShowProfileModal(true);
+      setProfileModalData({
+        id: convo.other_user.id,
+        full_name: targetName,
+        avatar_url: targetAvatar,
+        bio: convo.other_user?.bio,
+        distance: undefined,
+        isVIP: false,
+        isVerified: false,
+      });
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,10 +387,14 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
         setMessages(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
 
-        await supabase.from('conversations').update({
-          last_message: vanishMode ? '🔥 [私密圖片]' : '[圖片]',
-          last_message_time: new Date().toISOString()
-        }).eq('id', convo.id);
+        try {
+          await supabase.from('conversations').update({
+            last_message: vanishMode ? '🔥 [私密圖片]' : '[圖片]',
+            last_message_time: new Date().toISOString()
+          }).eq('id', convo.id);
+        } catch (convoError) {
+          console.error('🔴 更新對話預覽失敗:', convoError);
+        }
       } catch (err) {
         console.error('🔴 圖片傳送失敗:', err);
       }
@@ -393,16 +503,19 @@ export default function ChatRoom({ convo, onBack }: Props) {
       {showProfileModal && (
         <ProfileModal
           user={{
-            id: convo.other_user?.id,
-            full_name: targetName,
-            avatar_url: targetAvatar,
-            age: '25',
-            status: 'online',
-            tribe: 'relationship',
-            bio: convo.other_user?.bio || '這個人目前還沒有留下更多介紹。',
-            distance: '< 100m',
-            isVIP: false,
-            isVerified: false,
+            id: profileModalData?.id ?? convo.other_user?.id,
+            full_name: profileModalData?.full_name ?? targetName,
+            avatar_url: profileModalData?.avatar_url ?? targetAvatar,
+            age: profileModalData?.age,
+            status: profileModalData?.status,
+            tribe: profileModalData?.tribe,
+            bio: profileModalData?.bio ?? convo.other_user?.bio,
+            height: profileModalData?.height,
+            role: profileModalData?.role,
+            looking_for: profileModalData?.looking_for,
+            distance: profileModalData?.distance,
+            isVIP: profileModalData?.isVIP,
+            isVerified: profileModalData?.isVerified,
           }}
           onClose={() => setShowProfileModal(false)}
         />

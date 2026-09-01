@@ -34,6 +34,19 @@ export interface DBProfile {
   bio?: string;
 }
 
+export interface StoryRecord {
+  id: string;
+  user_id: string;
+  media_path: string;
+  media_type: 'image' | 'video';
+  caption?: string | null;
+  created_at: string;
+  expires_at: string;
+  is_deleted: boolean;
+  deleted_at?: string | null;
+  updated_at: string;
+}
+
 // ✅ 總監修正：對齊 Supabase messages 資料表
 export interface Message {
   id: string;
@@ -60,7 +73,6 @@ export interface Conversation {
   other_user: DBProfile;
   unread?: number;
 
-  // compatibility for older mock / static code
   user?: User;
   lastMessage?: string;
   lastTime?: string;

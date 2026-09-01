@@ -121,7 +121,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewPr
                 {user.isVIP && <Crown className="w-3 h-3 text-amber-500 flex-shrink-0" />}
               </div>
               {/* 若資料庫尚無 distance，預設顯示一段文字或空值 */}
-              <p className="text-white/50 text-[9px]">{user.bio ? user.bio.substring(0, 10) + '...' : '< 100m'}</p>
+              <p className="text-white/50 text-[9px]">{user.bio ? user.bio.substring(0, 10) + '...' : ''}</p>
             </div>
             
             {/* 真實的上線狀態指示器 (假設未來實作了 presence 功能) */}

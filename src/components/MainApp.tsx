@@ -15,7 +15,7 @@ import BlockedUsersList from '@/components/profile/BlockedUsersList';
 import { supabase } from '@/supabaseClient'; 
 
 export default function MainApp() {
-  const { stealthMode, unreadInbox, setUnreadInbox, unreadChat, setUnreadChat, showPaywall, setShowPaywall } = useApp();
+  const { stealthMode, unreadInbox, setUnreadInbox, unreadChat, setUnreadChat, showPaywall, setShowPaywall, blockedUsers } = useApp();
   const { user: currentUser } = useAuth(); 
   
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -27,6 +27,29 @@ export default function MainApp() {
     const handleJumpToChat = async (e: Event & { detail?: { id?: string; other_user?: { id?: string } } }) => {
       const targetUser = e.detail?.other_user || e.detail;
       if (!currentUser || !targetUser?.id) return;
+
+      try {
+        const { data: blockedByTarget, error: blockError } = await supabase
+          .from('blocks')
+          .select('id')
+          .eq('blocker_id', targetUser.id)
+          .eq('blocked_id', currentUser.id)
+          .maybeSingle();
+
+        if (blockError && blockError.code !== 'PGRST116') throw blockError;
+
+        if (blockedByTarget) {
+          alert('對方已封鎖你，無法發送訊息。');
+          return;
+        }
+      } catch (err) {
+        console.error('檢查封鎖狀態失敗:', err);
+      }
+
+      if (blockedUsers.has(targetUser.id)) {
+        alert('你已封鎖此使用者，無法發送訊息。');
+        return;
+      }
 
       try {
         let realRoomId: string | null = null;
@@ -99,7 +122,7 @@ export default function MainApp() {
 
     window.addEventListener('jump-to-chat', handleJumpToChat);
     return () => window.removeEventListener('jump-to-chat', handleJumpToChat);
-  }, [currentUser]);
+  }, [currentUser, blockedUsers]);
 
   useEffect(() => {
     if (!currentUser) return;
