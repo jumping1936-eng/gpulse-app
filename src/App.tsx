@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AppContext } from '@/context/AppContext';
+import { AppProvider, useApp } from '@/context/AppContext';
 import { AppState } from '@/types';
 import SafetyGuard from '@/components/SafetyGuard';
 import LoginScreen from '@/components/LoginScreen';
@@ -8,38 +8,22 @@ import MainApp from '@/components/MainApp';
 import { Loader2, Activity } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
-// ✅ 1. 引入剛剛建立的 AuthContext 大腦
-import { AuthProvider, useAuth } from '@/context/AuthContext'; 
+import { AuthProvider, useAuth } from '@/context/AuthContext';
 
 // ==========================================
 // 核心業務邏輯元件 (確保被 AuthProvider 包覆)
 // ==========================================
 function AppContent() {
-  // 取得 Supabase 驗證狀態
-  const { user, isLoading: isAuthLoading } = useAuth(); 
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const { simulateBlocked, setSimulateBlocked } = useApp();
 
   const [appState, setAppState] = useState<AppState>('safety-check');
   const [isChecking, setIsChecking] = useState(true);
 
-  // Global state
-  const [isVIP, setIsVIP] = useState(false);
-  const [isVerified, setIsVerified] = useState(false);
-  const [myAvatar, setMyAvatar] = useState<string | null>(null);
-  const [stealthMode, setStealthMode] = useState(false);
-  const [travelMode, setTravelMode] = useState(false);
-  const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
-  
-  // ✅ 總監修正：預設未讀歸零，避免幽靈紅點
-  const [unreadInbox, setUnreadInbox] = useState(0);
-  const [unreadChat, setUnreadChat] = useState(0);
-  
-  const [showPaywall, setShowPaywall] = useState(false);
-  const [simulateBlocked, setSimulateBlocked] = useState(false);
-
   // 資料庫連線測試
   useEffect(() => {
     const testConnection = async () => {
-      const { error } = await supabase.from('profiles').select('*').limit(1);
+      const { error } = await supabase.from('profiles').select('id').limit(1);
       if (error) {
         console.error("❌ 連線失敗，請檢查金鑰或網路：", error.message);
       } else {
@@ -73,23 +57,6 @@ function AppContent() {
     }
   }, [isChecking, isAuthLoading, user, simulateBlocked]);
 
-  function blockUser(id: string) {
-    setBlockedUsers(prev => new Set([...prev, id]));
-  }
-
-  const ctx = {
-    isVIP, setIsVIP,
-    isVerified, setIsVerified,
-    myAvatar, setMyAvatar,
-    stealthMode, setStealthMode,
-    travelMode, setTravelMode,
-    blockedUsers, blockUser,
-    unreadInbox, setUnreadInbox,
-    unreadChat, setUnreadChat,
-    showPaywall, setShowPaywall,
-    simulateBlocked, setSimulateBlocked,
-  };
-
   // 畫面 1：雙重 Loading 狀態 (地理檢查 or 驗證身份解析中)
   if (isChecking || isAuthLoading) {
     return (
@@ -107,7 +74,7 @@ function AppContent() {
 
   // 畫面 2：主應用程式路由
   return (
-    <AppContext.Provider value={ctx}>
+    <>
       {appState === 'blocked' && (
         <SafetyGuard onSimulateReal={() => { setSimulateBlocked(false); }} />
       )}
@@ -120,7 +87,7 @@ function AppContent() {
       {appState === 'app' && (
         <MainApp />
       )}
-    </AppContext.Provider>
+    </>
   );
 }
 
@@ -130,7 +97,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
     </AuthProvider>
   );
 }

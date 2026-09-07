@@ -15,7 +15,7 @@ import BlockedUsersList from '@/components/profile/BlockedUsersList';
 import { supabase } from '@/supabaseClient'; 
 
 export default function MainApp() {
-  const { stealthMode, unreadInbox, setUnreadInbox, unreadChat, setUnreadChat, showPaywall, setShowPaywall } = useApp();
+  const { stealthMode, unreadInbox, setUnreadInbox, unreadChat, setUnreadChat, showPaywall, dismissPaywall, blockedUsers, blockListStatus } = useApp();
   const { user: currentUser } = useAuth(); 
   
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -28,43 +28,25 @@ export default function MainApp() {
       const targetUser = e.detail?.other_user || e.detail;
       if (!currentUser || !targetUser?.id) return;
 
+      if (blockListStatus !== 'ready') {
+        alert('目前無法確認封鎖名單，暫時無法建立新對話。');
+        return;
+      }
+
+      if (targetUser.id === currentUser.id) {
+        alert('無法與自己建立對話。');
+        return;
+      }
+
+      if (blockedUsers.has(targetUser.id)) {
+        alert('你已封鎖此使用者，無法發送訊息。');
+        return;
+      }
+
       try {
-        let realRoomId: string | null = null;
-
-        try {
-          const { data, error } = await supabase.rpc('get_or_create_conversation', { other_id: targetUser.id });
-          if (error) throw error;
-          realRoomId = typeof data === 'string' ? data : null;
-        } catch (rpcError) {
-          console.warn('RPC get_or_create_conversation 不可用，改為手動建立對話:', rpcError);
-
-          const { data: existingConvo, error: fetchErr } = await supabase
-            .from('conversations')
-            .select('*')
-            .or(`and(user1_id.eq.${currentUser.id},user2_id.eq.${targetUser.id}),and(user1_id.eq.${targetUser.id},user2_id.eq.${currentUser.id})`)
-            .limit(1)
-            .maybeSingle();
-
-          if (fetchErr && fetchErr.code !== 'PGRST116') throw fetchErr;
-
-          if (existingConvo) {
-            realRoomId = existingConvo.id;
-          } else {
-            const { data: createdConvo, error: insertErr } = await supabase
-              .from('conversations')
-              .insert({
-                user1_id: currentUser.id,
-                user2_id: targetUser.id,
-                last_message: '',
-                last_message_time: new Date().toISOString(),
-              })
-              .select('id')
-              .single();
-
-            if (insertErr) throw insertErr;
-            realRoomId = createdConvo.id;
-          }
-        }
+        const { data: realRoomId, error: rpcError } = await supabase.rpc('get_or_create_conversation', { other_id: targetUser.id });
+        if (rpcError) throw rpcError;
+        if (typeof realRoomId !== 'string') throw new Error('建立對話未取得有效房間識別碼。');
 
         const { data: convoData, error: convoError } = await supabase
           .from('conversations')
@@ -99,19 +81,7 @@ export default function MainApp() {
 
     window.addEventListener('jump-to-chat', handleJumpToChat);
     return () => window.removeEventListener('jump-to-chat', handleJumpToChat);
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const notificationChannel = supabase
-      .channel('realtime-notifications')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `receiver_id=eq.${currentUser.id}` },
-        () => {
-          setUnreadInbox((prev: number) => (activeTab === 'inbox' ? prev : prev + 1));
-        }
-      ).subscribe();
-    return () => { supabase.removeChannel(notificationChannel); };
-  }, [currentUser, activeTab, setUnreadInbox]);
+  }, [currentUser, blockedUsers, blockListStatus]);
 
   useEffect(() => {
     if (activeTab === 'inbox') setUnreadInbox(0);
@@ -138,7 +108,13 @@ export default function MainApp() {
       <div className="flex-1 overflow-hidden relative">
         {activeTab === 'home' && <HomeFeed />}
         {activeTab === 'explore' && <ExploreTab />}
-        {activeTab === 'chat' && !activeChatConvo && <ChatList onOpenConvo={setActiveChatConvo} />}
+        {activeTab === 'chat' && !activeChatConvo && <ChatList onOpenConvo={(convo) => {
+          if (blockListStatus !== 'ready') {
+            alert('目前無法確認封鎖名單，暫時無法開啟對話。');
+            return;
+          }
+          setActiveChatConvo(convo);
+        }} />}
         {activeTab === 'chat' && activeChatConvo && <ChatRoom convo={activeChatConvo} onBack={() => setActiveChatConvo(null)} />}
         {activeTab === 'inbox' && <NotificationsTab />}
         {activeTab === 'profile' && <ProfileView onOpenBlockedUsers={() => setShowBlockedUsers(true)} />}
@@ -174,7 +150,7 @@ export default function MainApp() {
         </div>
       </nav>
 
-      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} />}
+      {showPaywall && <PaywallModal onClose={dismissPaywall} />}
       {showBlockedUsers && <BlockedUsersList onBack={() => setShowBlockedUsers(false)} />}
     </div>
   );

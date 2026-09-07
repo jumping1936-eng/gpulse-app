@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, UserX, Unlock, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useApp } from '@/context/AppContext';
 import { supabase } from '@/supabaseClient';
 
 interface BlockedUser {
@@ -19,6 +20,7 @@ interface Props {
 
 export default function BlockedUsersList({ onBack }: Props) {
   const { user } = useAuth();
+  const { unblockUser } = useApp();
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -83,13 +85,7 @@ export default function BlockedUsersList({ onBack }: Props) {
     if (!user?.id) return;
 
     try {
-      const { error } = await supabase
-        .from('blocks')
-        .delete()
-        .eq('blocker_id', user.id)
-        .eq('blocked_id', userId);
-
-      if (error) throw error;
+      await unblockUser(userId);
       setBlockedUsers(prev => prev.filter(row => row.blocked_id !== userId));
     } catch (error) {
       console.error('解除封鎖失敗:', error);
@@ -146,7 +142,7 @@ export default function BlockedUsersList({ onBack }: Props) {
 
                 {/* 解除封鎖按鈕 */}
                 <button
-                  onClick={() => handleUnblock(user.id)}
+                  onClick={() => handleUnblock(user.blocked_id)}
                   className="bg-white/10 hover:bg-white/20 active:bg-white/30 text-white text-xs font-medium px-4 py-2 rounded-full transition-colors flex items-center gap-1.5"
                 >
                   <Unlock className="w-3.5 h-3.5" />

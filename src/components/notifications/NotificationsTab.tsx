@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Mail, UserPlus, Lock, Loader2, Inbox, Sparkles, ShieldCheck } from 'lucide-react';
+import { Heart, Mail, UserPlus, Lock, Loader2, Inbox, Sparkles } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
@@ -15,6 +15,7 @@ export default function NotificationsTab() {
     sender?: { id?: string; full_name?: string; avatar_url?: string };
   }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchNotifications = React.useCallback(async () => {
     if (!user?.id) {
@@ -34,9 +35,11 @@ export default function NotificationsTab() {
       if (error) throw error;
 
       setNotifications((data ?? []) as Array<{ id: string; type: string; created_at: string; sender?: { id?: string; full_name?: string; avatar_url?: string } }>);
+      setErrorMessage(null);
     } catch (err) {
       console.error('🔴 獲取通知失敗:', err);
       setNotifications([]);
+      setErrorMessage('無法載入通知，請稍後再試。');
     } finally {
       setIsLoading(false);
     }
@@ -50,6 +53,21 @@ export default function NotificationsTab() {
       setUnreadInbox(0);
     };
   }, [fetchNotifications, setUnreadInbox]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`notifications-list:${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `receiver_id=eq.${user.id}` },
+        () => { void fetchNotifications(); },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchNotifications, user?.id]);
 
   const systemNotifications = notifications.filter((item) =>
     item.type === 'system' || item.type === 'welcome' || item.type === 'security' || item.type === 'update'
@@ -102,6 +120,12 @@ export default function NotificationsTab() {
                 <Loader2 className="w-6 h-6 animate-spin text-pink-500" />
                 <span className="text-sm">載入通知中...</span>
               </div>
+            ) : errorMessage ? (
+              <div className="flex flex-col items-center justify-center h-64 gap-4 text-rose-300 text-center px-6">
+                <Inbox className="w-12 h-12" />
+                <span className="text-sm">{errorMessage}</span>
+                <button onClick={() => void fetchNotifications()} className="rounded-full border border-rose-400/40 px-3 py-1.5 text-xs text-rose-200">重試</button>
+              </div>
             ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 gap-4 text-slate-500 opacity-60">
                 <Inbox className="w-12 h-12" />
@@ -110,7 +134,7 @@ export default function NotificationsTab() {
             ) : (
               notifications.map((notif) => {
                 const sender = notif.sender || {};
-                const senderName = typeof sender.full_name === 'string' ? sender.full_name : '神秘用戶';
+                const senderName = typeof sender.full_name === 'string' ? sender.full_name : '未設定名稱';
 
                 let message = '傳送了通知';
                 let IconComponent = Heart;
@@ -149,20 +173,22 @@ export default function NotificationsTab() {
         {activeTab === 'system' && (
           <div className="flex flex-col animate-in fade-in slide-in-from-left-4 duration-300 pt-4">
             {systemNotifications.length === 0 ? (
+              errorMessage ? (
+                <div className="flex flex-col items-center justify-center h-[420px] gap-4 text-rose-300 text-center px-6">
+                  <Inbox className="w-12 h-12" />
+                  <span className="text-sm">{errorMessage}</span>
+                  <button onClick={() => void fetchNotifications()} className="rounded-full border border-rose-400/40 px-3 py-1.5 text-xs text-rose-200">重試</button>
+                </div>
+              ) : (
               <div className="flex flex-col items-center justify-center h-[420px] rounded-[28px] border border-violet-500/20 bg-gradient-to-br from-violet-500/10 via-slate-900 to-sky-500/10 text-center px-6 shadow-[0_20px_60px_rgba(76,29,149,0.22)]">
                 <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-400/30 bg-violet-500/10 text-violet-200 shadow-lg shadow-violet-500/20">
                   <Sparkles className="h-8 w-8" />
                 </div>
                 <p className="text-[11px] uppercase tracking-[0.28em] text-violet-300/75">system status</p>
                 <h3 className="mt-3 text-2xl font-bold text-white">訊息中心是空的</h3>
-                <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300">
-                  目前還沒有系統公告或安全更新，等到重要通知來臨時，我們會在這裡先行提醒你。
-                </p>
-                <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-violet-200">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  你的帳號目前運作正常
-                </div>
+                <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300">目前還沒有系統公告或安全更新。</p>
               </div>
+              )
             ) : (
               systemNotifications.map((notif) => (
                 <div key={notif.id} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 mb-3">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { getPublicProfilePhoto } from '@/utils/profile';
 // 移除了 STORY_USERS 的假資料依賴
 
 // ✅ 1. 擴充 Props，接收來自 ExploreTab 的真實資料
@@ -7,6 +8,8 @@ interface StoryProfile {
   id: string;
   full_name?: string;
   avatar_url?: string;
+  public_photos?: string[];
+  hasStory?: boolean;
 }
 
 interface Props {
@@ -17,6 +20,7 @@ interface Props {
 
 export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) {
   const [viewedStories, setViewedStories] = useState<Set<string>>(new Set());
+  const myPrimaryPhoto = getPublicProfilePhoto(myProfile?.public_photos, myProfile?.avatar_url);
 
   function handleView(user: StoryProfile) {
     setViewedStories(prev => new Set([...prev, user.id]));
@@ -48,8 +52,8 @@ export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) 
         <div className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group">
           <div className="relative">
             <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-dashed border-white/20 group-hover:border-violet-500/60 transition-all flex items-center justify-center overflow-hidden">
-              {myProfile?.avatar_url ? (
-                <img src={myProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
+              {myPrimaryPhoto ? (
+                <img src={myPrimaryPhoto} alt="Me" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center">
                   <span className="text-white/50 text-lg font-bold">我</span>
@@ -66,7 +70,7 @@ export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) 
         {/* ========================================== */}
         {/* 其他使用者的限時動態 (讀取真實 profiles，最多取前 15 筆避免過載) */}
         {/* ========================================== */}
-        {profiles.slice(0, 15).map((user, index) => {
+        {profiles.filter(profile => profile.hasStory).slice(0, 15).map((user, index) => {
           const isViewed = viewedStories.has(user.id);
           
           return (
@@ -84,8 +88,8 @@ export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) 
                 <div className="w-14 h-14 rounded-full flex items-center justify-center border-2 border-slate-950 transition-all group-hover:scale-105 overflow-hidden bg-slate-800">
                   
                   {/* 若有真實頭像則顯示，否則顯示漸層與縮寫 */}
-                  {user.avatar_url ? (
-                    <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+                  {getPublicProfilePhoto(user.public_photos, user.avatar_url) ? (
+                    <img src={getPublicProfilePhoto(user.public_photos, user.avatar_url)} alt={user.full_name} className="w-full h-full object-cover" />
                   ) : (
                     <div className={`w-full h-full bg-gradient-to-br ${getGradient(index)} flex items-center justify-center`}>
                       <span className="text-white font-bold text-sm">

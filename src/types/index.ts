@@ -1,8 +1,10 @@
 import type { Dispatch, SetStateAction } from 'react';
+import type { EntitlementStatus, TrialEligibility } from '@/utils/entitlement';
 
 export type AppState = 'safety-check' | 'blocked' | 'login' | 'legal' | 'app';
 export type Tab = 'home' | 'explore' | 'chat' | 'inbox' | 'profile';
 export type TribeType = 'all' | 'bear' | 'wolf' | 'otter' | 'twink' | 'jock' | 'chat' | 'relationship';
+export type BlockListStatus = 'loading' | 'ready' | 'error' | 'unauthenticated';
 
 // 保留原有的 User 介面供其他靜態畫面使用
 export interface User {
@@ -14,6 +16,7 @@ export interface User {
   gradientFrom: string;
   gradientTo: string;
   initials: string;
+  public_photos?: string[];
   isVerified: boolean;
   isVIP: boolean;
   hasStory: boolean;
@@ -80,7 +83,12 @@ export interface Notification {
 
 export interface AppContextType {
   isVIP: boolean;
-  setIsVIP: (v: boolean) => void;
+  hasVipAccess: boolean;
+  entitlementStatus: EntitlementStatus;
+  entitlementError: string | null;
+  trialEligibility: TrialEligibility;
+  requestVipUpgrade: () => void;
+  dismissPaywall: () => void;
   isVerified: boolean;
   setIsVerified: (v: boolean) => void;
   myAvatar: string | null;
@@ -90,6 +98,7 @@ export interface AppContextType {
   travelMode: boolean;
   setTravelMode: (v: boolean) => void;
   blockedUsers: Set<string>;
+  blockListStatus: BlockListStatus;
   blockUser: (id: string) => Promise<void>;
   unblockUser: (id: string) => Promise<void>;
   unreadInbox: number;
@@ -97,7 +106,6 @@ export interface AppContextType {
   unreadChat: number;
   setUnreadChat: Dispatch<SetStateAction<number>>;
   showPaywall: boolean;
-  setShowPaywall: (v: boolean) => void;
   simulateBlocked: boolean;
   setSimulateBlocked: (v: boolean) => void;
 }

@@ -43,13 +43,14 @@ export default function LoginScreen({ onLogin }: Props) {
 
   // === 記住我功能 ===
   useEffect(() => {
+    // Remove credentials saved by legacy builds. Passwords must never persist in browser storage.
+    localStorage.removeItem('gpulse_password');
+
     const savedRemember = localStorage.getItem('gpulse_remember') === 'true';
     if (savedRemember) {
       setRememberMe(true);
       const savedEmail = localStorage.getItem('gpulse_email');
-      const savedPassword = localStorage.getItem('gpulse_password');
       if (savedEmail) setEmail(savedEmail);
-      if (savedPassword) setPassword(savedPassword);
     }
   }, []);
 
@@ -57,11 +58,9 @@ export default function LoginScreen({ onLogin }: Props) {
     if (rememberMe) {
       localStorage.setItem('gpulse_remember', 'true');
       localStorage.setItem('gpulse_email', email);
-      localStorage.setItem('gpulse_password', password); 
     } else {
       localStorage.removeItem('gpulse_remember');
       localStorage.removeItem('gpulse_email');
-      localStorage.removeItem('gpulse_password');
     }
   };
 

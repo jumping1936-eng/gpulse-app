@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { MessageCircle, User as UserIcon, Loader2, Sparkles } from 'lucide-react';
 import { Conversation, DBProfile } from '@/types';
 import { supabase } from '@/supabaseClient';
@@ -9,10 +9,9 @@ interface Props {
 }
 
 export default function ChatList({ onOpenConvo }: Props) {
-  const { setUnreadChat } = useApp();
+  const { setUnreadChat, blockedUsers } = useApp();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [, setMyId] = useState<string | null>(null);
 
   useEffect(() => {
     setUnreadChat(0);
@@ -27,14 +26,58 @@ export default function ChatList({ onOpenConvo }: Props) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const fetchConversations = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('conversations')
+        .select(`
+          *,
+          user1:profiles!user1_id(id, full_name, avatar_url),
+          user2:profiles!user2_id(id, full_name, avatar_url)
+        `)
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+        .order('last_message_time', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedConvos = data
+        .map((convo: Record<string, unknown>): Conversation | null => {
+          const isUser1 = (convo.user1_id as string) === user.id;
+          const otherUser = isUser1 ? (convo.user2 as Record<string, unknown>) : (convo.user1 as Record<string, unknown>);
+
+          const otherUserId = typeof otherUser?.id === 'string' ? otherUser.id : null;
+          if (!otherUserId) return null;
+          if (blockedUsers.has(otherUserId)) return null;
+
+          return {
+            id: String(convo.id),
+            created_at: typeof convo.created_at === 'string' ? convo.created_at : undefined,
+            user1_id: typeof convo.user1_id === 'string' ? convo.user1_id : undefined,
+            user2_id: typeof convo.user2_id === 'string' ? convo.user2_id : undefined,
+            last_message: typeof convo.last_message === 'string' ? convo.last_message : '尚未開始對話',
+            last_message_time: typeof convo.last_message_time === 'string' ? convo.last_message_time : undefined,
+            other_user: otherUser as unknown as DBProfile,
+            unread: typeof convo.unread === 'number' ? convo.unread : 0,
+          };
+        })
+        .filter((convo): convo is Conversation => convo !== null);
+
+      setConversations(formattedConvos);
+    } catch (error) {
+      console.error('🔴 讀取聊天列表失敗:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [blockedUsers]);
+
   useEffect(() => {
     fetchConversations();
+  }, [fetchConversations]);
 
-    // TODO: Supabase Realtime WebSocket / postgres_changes 架構預留
-    // 1. 訂閱 conversations 表：當 last_message / last_message_time 更新時，重整列表
-    // 2. 訂閱 messages 表：當有新訊息 insert 時，更新該對話的 preview + unread count
-    // 3. 若目前 tab 非 active，可同步 AppContext unreadChat，並在新訊息來源處觸發紅點更新
-    // 4. 這裡可抽出為 useRealtimeConversations() hook，保持 ChatList 責任單一
+  useEffect(() => {
     const channel = supabase
       .channel('public:conversations')
       .on(
@@ -49,55 +92,12 @@ export default function ChatList({ onOpenConvo }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchConversations]);
 
-  const fetchConversations = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setMyId(user.id);
-
-      const { data, error } = await supabase
-        .from('conversations')
-        .select(`
-          *,
-          user1:profiles!user1_id(id, full_name, avatar_url),
-          user2:profiles!user2_id(id, full_name, avatar_url)
-        `)
-        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
-        .order('last_message_time', { ascending: false });
-
-      if (error) throw error;
-
-      const formattedConvos = data.map((convo: Record<string, unknown>, index: number) => {
-        const isUser1 = convo.user1_id === user.id;
-        const otherUser = isUser1 ? convo.user2 : convo.user1;
-
-        return {
-          id: String(convo.id),
-          created_at: typeof convo.created_at === 'string' ? convo.created_at : undefined,
-          user1_id: typeof convo.user1_id === 'string' ? convo.user1_id : undefined,
-          user2_id: typeof convo.user2_id === 'string' ? convo.user2_id : undefined,
-          last_message: typeof convo.last_message === 'string' ? convo.last_message : '尚未開始對話',
-          last_message_time: typeof convo.last_message_time === 'string' ? convo.last_message_time : undefined,
-          other_user: (otherUser as DBProfile) ?? { id: '', full_name: '探索新朋友', avatar_url: '', bio: '' },
-          unread: typeof convo.unread === 'number' ? convo.unread : (index % 3 === 0 ? 2 : 0),
-        };
-      });
-
-      setConversations(formattedConvos);
-    } catch (error) {
-      console.error('🔴 讀取聊天列表失敗:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const recentMatches = conversations.slice(0, 8).map((convo, index) => ({
+  const recentMatches = conversations.slice(0, 8).map((convo) => ({
     id: convo.id,
     name: convo.other_user?.full_name || '探索新朋友',
     avatar: convo.other_user?.avatar_url || '',
-    online: index % 2 === 0,
   }));
 
   if (loading) {
@@ -131,7 +131,7 @@ export default function ChatList({ onOpenConvo }: Props) {
         <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {recentMatches.map(match => (
             <div key={match.id} className="flex-shrink-0 text-center w-[68px]">
-              <div className="relative mx-auto mb-2">
+                  <div className="relative mx-auto mb-2">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500/30 to-blue-500/10 border border-white/10 shadow-lg shadow-violet-500/10 overflow-hidden flex items-center justify-center">
                   {match.avatar ? (
                     <img src={match.avatar} alt={match.name} className="w-full h-full object-cover" />
@@ -139,9 +139,6 @@ export default function ChatList({ onOpenConvo }: Props) {
                     <span className="text-white font-bold text-sm">{match.name?.slice(0, 2).toUpperCase() || '??'}</span>
                   )}
                 </div>
-                {match.online && (
-                  <span className="absolute bottom-1 right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-slate-950" />
-                )}
               </div>
               <span className="block text-[11px] text-white/75 truncate w-full">{match.name}</span>
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, TribeType } from '@/types';
+import { TribeType } from '@/types';
 import StoriesBar from './StoriesBar';
 import StoryViewer from './StoryViewer';
 import TribeFilters from './TribeFilters';
@@ -7,7 +7,8 @@ import ExploreGrid from './ExploreGrid';
 import ProfileModal from './ProfileModal';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
-import { ArrowUpRight, Crown, Loader2, MapPin } from 'lucide-react';
+import { ArrowUpRight, Crown, MapPin, Compass } from 'lucide-react';
+import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 
 type StoryUser = {
   id: string;
@@ -21,151 +22,125 @@ interface ProfileRecord {
   full_name: string;
   age: number;
   avatar_url: string;
+  public_photos: string[];
   location: string;
   is_vip: boolean;
   status: string;
   bio: string;
+  tribe?: string;
+  height?: number;
+  role?: string[];
+  looking_for?: string[];
 }
 
 interface NearbyUser {
   id: string;
-  name: string;
+  full_name: string;
   age: number;
-  avatar: string;
+  photo_url?: string;
   city: string;
   isVIP: boolean;
   isOnline: boolean;
   accent: string;
-  distance: string;
 }
 
 interface Recommendation {
   id: string;
-  name: string;
+  full_name: string;
   age: number;
-  avatar: string;
+  photo_url?: string;
   city: string;
-  title: string;
   bio: string;
-  tags: string[];
-  score: number;
-  gradient: string;
   isVIP: boolean;
 }
 
-const fallbackProfiles: ProfileRecord[] = [
-  { id: 'fallback-1', full_name: 'Maya', age: 27, avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=500&q=80', location: '中山區', is_vip: true, status: 'online', bio: '喜歡週末咖啡與城市漫遊，聊得很自然。' },
-  { id: 'fallback-2', full_name: 'Theo', age: 29, avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=500&q=80', location: '信義區', is_vip: false, status: 'online', bio: '熱愛運動、旅行與慢速聊天，對生活有品味。' },
-  { id: 'fallback-3', full_name: 'Jin', age: 31, avatar_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=500&q=80', location: '大安區', is_vip: true, status: 'online', bio: '音樂、展覽和新店探索都很上癮。' },
-  { id: 'fallback-4', full_name: 'Sora', age: 24, avatar_url: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=500&q=80', location: '松山區', is_vip: false, status: 'online', bio: '簡單而真誠，喜歡逛市集和談天說地。' },
-  { id: 'fallback-5', full_name: 'Noah', age: 26, avatar_url: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=500&q=80', location: '板橋區', is_vip: true, status: 'offline', bio: '想認識有趣又安靜的人，慢慢相處比較舒服。' },
-  { id: 'fallback-6', full_name: 'Ariel', age: 28, avatar_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80', location: '大安區', is_vip: true, status: 'online', bio: '週末咖啡探險夥伴，喜歡音樂與城市散步。' },
-  { id: 'fallback-7', full_name: 'Leo', age: 30, avatar_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=80', location: '中山區', is_vip: false, status: 'online', bio: '瑜珈、登山與週末市集，熱愛無壓力交流。' },
-  { id: 'fallback-8', full_name: 'Zoe', age: 25, avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=80', location: '信義區', is_vip: true, status: 'online', bio: '看展、探店與微醺夜晚，想認識有趣的人。' },
-  { id: 'fallback-9', full_name: 'Daniel', age: 33, avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=80', location: '松山區', is_vip: false, status: 'offline', bio: '對美食、電影和新店探索永遠不嫌多。' },
-  { id: 'fallback-10', full_name: 'Iris', age: 26, avatar_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80', location: '中和區', is_vip: false, status: 'online', bio: '喜歡慢慢聊、泡茶與放鬆的相處節奏。' },
-];
-
-const gradientOptions = [
-  'from-violet-600/90 to-blue-600/80',
-  'from-emerald-600/90 to-teal-600/80',
-  'from-pink-600/90 to-rose-600/80',
-  'from-orange-500/90 to-amber-500/80',
-  'from-sky-600/90 to-indigo-600/80',
-];
-
 const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecord>): ProfileRecord[] => {
   if (!Array.isArray(records) || records.length === 0) {
-    return fallbackProfiles;
+    return [];
   }
 
   return records.map((profile, index) => {
     const raw = profile as Record<string, unknown>;
-    const name = typeof raw.full_name === 'string'
-      ? raw.full_name
-      : typeof raw.name === 'string'
-        ? raw.name
-        : `User ${index + 1}`;
+    const rawName = typeof raw.full_name === 'string' ? raw.full_name : '';
+    const name = isValidProfileName(rawName) ? rawName : '';
 
-    const age = Number.isFinite(Number(raw.age)) ? Number(raw.age) : 25 + (index % 6);
-    const avatar = typeof raw.avatar_url === 'string'
-      ? raw.avatar_url
-      : typeof raw.avatar === 'string'
-        ? raw.avatar
-        : `https://i.pravatar.cc/500?u=${index + 1}`;
+    const age = Number.isFinite(Number(raw.age)) ? Number(raw.age) : 0;
+    const avatar = typeof raw.avatar_url === 'string' ? raw.avatar_url : '';
+    const publicPhotos = Array.isArray(raw.public_photos)
+      ? raw.public_photos.filter((item): item is string => typeof item === 'string')
+      : [];
     const location = typeof raw.location === 'string'
       ? raw.location
       : typeof raw.city === 'string'
         ? raw.city
-        : '台北市';
+        : '';
     const bio = typeof raw.bio === 'string' && raw.bio.trim().length > 0
       ? raw.bio
-      : '為了更自然的相遇，我們都在等待一個真誠的連結。';
-    const status = typeof raw.status === 'string' ? raw.status.toLowerCase() : index % 3 === 0 ? 'offline' : 'online';
+      : '';
+    const status = typeof raw.status === 'string' ? raw.status.toLowerCase() : '';
+
+    const tribe = typeof raw.tribe === 'string' ? raw.tribe : undefined;
+
+    const rawHeight = Number(raw.height);
+    const height = Number.isFinite(rawHeight) ? rawHeight : undefined;
+
+    let role: string[] | undefined;
+    if (Array.isArray(raw.role)) {
+      role = raw.role.filter((item): item is string => typeof item === 'string');
+    } else if (typeof raw.role === 'string' && raw.role.trim().length > 0) {
+      role = raw.role.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+
+    let lookingFor: string[] | undefined;
+    if (Array.isArray(raw.looking_for)) {
+      lookingFor = raw.looking_for.filter((item): item is string => typeof item === 'string');
+    } else if (typeof raw.looking_for === 'string' && raw.looking_for.trim().length > 0) {
+      lookingFor = raw.looking_for.split(',').map((item) => item.trim()).filter(Boolean);
+    }
 
     return {
       id: String(raw.id ?? `profile-${index}`),
       full_name: name,
       age,
       avatar_url: avatar,
+      public_photos: publicPhotos,
       location,
       is_vip: Boolean(raw.is_vip ?? raw.isVIP ?? false),
       status,
       bio,
+      tribe,
+      height,
+      role,
+      looking_for: lookingFor,
     };
   });
 };
-
-const mapProfileToUser = (profile: ProfileRecord, index: number): User => ({
-  id: profile.id,
-  name: profile.full_name,
-  age: profile.age,
-  tribe: (['bear', 'wolf', 'otter', 'twink', 'jock', 'chat', 'relationship'] as TribeType[])[index % 7],
-  distance: `${(index + 1) * 0.8} km`,
-  gradientFrom: ['violet-500', 'cyan-500', 'amber-500', 'pink-500', 'emerald-500'][index % 5],
-  gradientTo: ['blue-500', 'sky-500', 'orange-500', 'rose-500', 'teal-500'][index % 5],
-  initials: profile.full_name
-    .split(' ')
-    .map(part => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase(),
-  isVerified: profile.is_vip,
-  isVIP: profile.is_vip,
-  hasStory: true,
-  storyViewed: false,
-  bio: profile.bio,
-  height: '165-178cm',
-  role: 'New here',
-  lookingFor: '真誠相遇',
-  lastSeen: profile.status === 'online' ? '線上' : '離線',
-  bodyType: '均衡型',
-});
 
 export default function ExploreTab() {
   const { user: authUser } = useAuth();
   const [viewingStory, setViewingStory] = useState<StoryUser | null>(null);
   const [activeTribe, setActiveTribe] = useState<TribeType>('all');
 
-  const [profiles, setProfiles] = useState<User[]>([]);
-  const [myProfile, setMyProfile] = useState<User | null>(null);
+  const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
+  const [myProfile, setMyProfile] = useState<ProfileRecord | null>(null);
   const [users, setUsers] = useState<ProfileRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'vip' | 'fresh' | 'nearby'>('all');
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'vip'>('all');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<ProfileRecord | null>(null);
 
   const fetchRealProfiles = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.from('profiles').select('*');
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, age, avatar_url, public_photos, location, is_vip, status, bio, tribe, height, role, looking_for');
 
       if (error) throw error;
 
       const nextUsers = normalizeProfiles(Array.isArray(data) ? data : []);
-      const appProfiles = nextUsers.map(mapProfileToUser);
-      const otherProfiles = appProfiles.filter(profile => profile.id !== authUser?.id);
-      const mine = appProfiles.find(profile => profile.id === authUser?.id) ?? null;
+      const otherProfiles = nextUsers.filter(profile => profile.id !== authUser?.id);
+      const mine = nextUsers.find(profile => profile.id === authUser?.id) ?? null;
 
       setUsers(nextUsers);
       setProfiles(otherProfiles);
@@ -191,45 +166,38 @@ export default function ExploreTab() {
     }
   }, [authUser, fetchRealProfiles]);
 
+  useEffect(() => {
+    const handleProfileUpdated = () => {
+      void fetchRealProfiles();
+    };
+
+    window.addEventListener('gpulse-profile-updated', handleProfileUpdated);
+    return () => window.removeEventListener('gpulse-profile-updated', handleProfileUpdated);
+  }, [fetchRealProfiles]);
+
   const nearbyUsers = useMemo<NearbyUser[]>(() => {
-    const source = users.length ? users : fallbackProfiles;
-    return source.slice(0, 5).map((user, index) => ({
+    const source = users;
+    return source.slice(0, 5).map((user) => ({
       id: user.id,
-      name: user.full_name,
+      full_name: user.full_name,
       age: user.age,
-      avatar: user.avatar_url,
+      photo_url: getPublicProfilePhoto(user.public_photos, user.avatar_url),
       city: user.location,
       isVIP: user.is_vip,
       isOnline: user.status === 'online',
-      accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][index % 5],
-      distance: `${(index + 1) * 0.8} km`,
+      accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][user.id.charCodeAt(0) % 5],
     }));
   }, [users]);
-
   const recommendations = useMemo<Recommendation[]>(() => {
-    const source = users.length ? users : fallbackProfiles;
-    return source.slice(5).map((user, index) => {
-      const titleMap = ['週末咖啡探險夥伴', '運動型聊天', '文青話題高手', '週末約會首選', '壓力小解型', '新鮮感對話者'];
-      const tagsByIndex = [
-        ['咖啡', '音樂', '散步'],
-        ['運動', '旅行', '健康'],
-        ['看展', '文青', '夜遊'],
-        ['美食', '電影', '約會'],
-        ['慢聊', '泡茶', '放鬆'],
-        ['市集', '咖啡', '聊天'],
-      ];
-
+    const source = users;
+    return source.slice(5).map((user) => {
       return {
         id: user.id,
-        name: user.full_name,
+        full_name: user.full_name,
         age: user.age,
-        avatar: user.avatar_url,
+        photo_url: getPublicProfilePhoto(user.public_photos, user.avatar_url),
         city: user.location,
-        title: titleMap[index % titleMap.length],
         bio: user.bio,
-        tags: tagsByIndex[index % tagsByIndex.length],
-        score: 88 + ((index + 1) * 3) % 10,
-        gradient: gradientOptions[index % gradientOptions.length],
         isVIP: user.is_vip,
       };
     });
@@ -239,15 +207,12 @@ export default function ExploreTab() {
     const items = [...recommendations];
     const result = items.filter((item) => {
       if (selectedFilter === 'vip') return item.isVIP;
-      if (selectedFilter === 'fresh') return item.score >= 92;
-      if (selectedFilter === 'nearby') return item.score >= 90;
       return true;
     });
 
     result.sort((a, b) => {
       if (a.isVIP !== b.isVIP) return a.isVIP ? -1 : 1;
-      if (b.score !== a.score) return b.score - a.score;
-      return a.name.localeCompare(b.name);
+      return a.full_name.localeCompare(b.full_name);
     });
 
     return result;
@@ -284,6 +249,11 @@ export default function ExploreTab() {
               </div>
             ))}
           </div>
+        ) : nearbyUsers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/30">
+            <Compass className="w-8 h-8" />
+            <p className="text-xs">附近暫時沒有其他使用者</p>
+          </div>
         ) : (
           <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {nearbyUsers.map((user) => (
@@ -295,7 +265,13 @@ export default function ExploreTab() {
               >
                 <div className={`relative overflow-hidden rounded-[18px] bg-gradient-to-br ${user.accent} p-[1px]`}>
                   <div className="relative overflow-hidden rounded-[17px]">
-                    <img src={user.avatar} alt={user.name} className="h-32 w-full object-cover" />
+                    {user.photo_url ? (
+                      <img src={user.photo_url} alt={user.full_name} className="h-32 w-full object-cover" />
+                    ) : (
+                      <div className="h-32 w-full bg-gradient-to-br from-violet-500/30 to-blue-500/30 flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">{isValidProfileName(user.full_name) ? user.full_name.slice(0, 2).toUpperCase() : '??'}</span>
+                      </div>
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
                     {user.isVIP && (
                       <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">
@@ -305,7 +281,7 @@ export default function ExploreTab() {
                     )}
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                       <div>
-                        <p className="text-base font-bold leading-none text-white">{user.name}</p>
+                        <p className="text-base font-bold leading-none text-white">{isValidProfileName(user.full_name) ? user.full_name : '尚未設定名稱'}</p>
                         <p className="mt-1 text-[10px] text-white/80">{user.age}</p>
                       </div>
                       <div className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-slate-950/60 px-1.5 py-1 text-[9px] text-emerald-300 backdrop-blur-xl">
@@ -316,13 +292,12 @@ export default function ExploreTab() {
                   </div>
                 </div>
 
-                <div className="mt-2 flex items-center justify-between text-[10px] text-slate-300">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3 text-violet-300" />
-                    {user.city}
-                  </span>
-                  <span className="text-violet-200">{user.distance}</span>
-                </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-slate-300">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3 text-violet-300" />
+                      {user.city}
+                    </span>
+                  </div>
               </button>
             ))}
           </div>
@@ -344,13 +319,11 @@ export default function ExploreTab() {
           {[
             { id: 'all', label: '全部' },
             { id: 'vip', label: 'VIP' },
-            { id: 'fresh', label: '新鮮' },
-            { id: 'nearby', label: '附近' },
           ].map((filter) => (
             <button
               key={filter.id}
               type="button"
-              onClick={() => setSelectedFilter(filter.id as 'all' | 'vip' | 'fresh' | 'nearby')}
+              onClick={() => setSelectedFilter(filter.id as 'all' | 'vip')}
               className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${
                 selectedFilter === filter.id
                   ? 'border-violet-500/60 bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg shadow-violet-500/20'
@@ -376,6 +349,11 @@ export default function ExploreTab() {
               </div>
             ))}
           </div>
+        ) : filteredRecommendations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/30">
+            <Crown className="w-8 h-8" />
+            <p className="text-xs">目前還沒有推薦使用者</p>
+          </div>
         ) : (
           <div className="columns-2 gap-3">
             {filteredRecommendations.map((item) => (
@@ -384,24 +362,28 @@ export default function ExploreTab() {
                 onClick={() => setSelectedUserId(item.id)}
                 className={`mb-3 inline-block w-full cursor-pointer overflow-hidden rounded-[24px] border bg-slate-900/80 shadow-lg shadow-slate-950/40 backdrop-blur-xl break-inside-avoid transition hover:-translate-y-0.5 ${selectedUserId === item.id ? 'border-violet-500/60 shadow-violet-500/10' : 'border-white/10'}`}
               >
-                <div className={`relative bg-gradient-to-br ${item.gradient} p-[1px]`}>
-                  <div className="relative overflow-hidden rounded-t-[23px]">
-                    <img src={item.avatar} alt={item.name} className="h-48 w-full object-cover" />
-                    {item.isVIP && (
-                      <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">
-                        <Crown className="h-3 w-3" />
-                        VIP
-                      </div>
-                    )}
-                    <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title="online" />
-                  </div>
+                <div className="relative overflow-hidden rounded-t-[23px]">
+                  {item.photo_url ? (
+                    <img src={item.photo_url} alt={item.full_name} className="h-48 w-full object-cover" />
+                  ) : (
+                    <div className="h-48 w-full bg-gradient-to-br from-violet-500/30 to-blue-500/30 flex items-center justify-center">
+                      <span className="text-white font-bold text-xl">{isValidProfileName(item.full_name) ? item.full_name.slice(0, 2).toUpperCase() : '??'}</span>
+                    </div>
+                  )}
+                  {item.isVIP && (
+                    <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">
+                      <Crown className="h-3 w-3" />
+                      VIP
+                    </div>
+                  )}
+                  <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title="online" />
                 </div>
 
                 <div className="space-y-3 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <h3 className="text-base font-bold text-white">{item.name}, {item.age}</h3>
+                        <h3 className="text-base font-bold text-white">{isValidProfileName(item.full_name) ? item.full_name : '尚未設定名稱'}{item.age ? `, ${item.age}` : ''}</h3>
                         {item.isVIP && <Crown className="h-3.5 w-3.5 text-amber-400" />}
                       </div>
                       <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">
@@ -409,25 +391,9 @@ export default function ExploreTab() {
                         {item.city}
                       </div>
                     </div>
-                    <div className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-300">
-                      {item.score}%
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-300/80">Matching</p>
-                    <h4 className="mt-1 text-sm font-bold text-white">{item.title}</h4>
                   </div>
 
                   <p className="text-[11px] leading-5 text-slate-300">{item.bio}</p>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {item.tags.map((tag) => (
-                      <span key={tag} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-medium text-slate-200">
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               </article>
             ))}
@@ -441,11 +407,11 @@ export default function ExploreTab() {
         activeTribe={activeTribe}
         profiles={profiles}
         myProfile={myProfile}
-        onViewProfile={(profile) => setSelectedProfile(profile as ProfileRecord | null)}
+        onViewProfile={setSelectedProfile}
       />
 
       {selectedProfile && (
-        <ProfileModal user={selectedProfile as any} onClose={() => setSelectedProfile(null)} />
+        <ProfileModal user={selectedProfile} onClose={() => setSelectedProfile(null)} />
       )}
 
       {viewingStory && (

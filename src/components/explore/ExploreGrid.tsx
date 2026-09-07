@@ -3,18 +3,20 @@ import { Crown, BadgeCheck, Camera } from 'lucide-react';
 import { TribeType } from '@/types';
 import { useApp } from '@/context/AppContext';
 import ProfileModal from './ProfileModal';
+import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 
 // ✅ 1. 擴充 Props，接收來自上層 (ExploreTab) 的真實資料庫資料
 interface ProfileRow {
   id: string;
   full_name?: string;
   avatar_url?: string;
+  public_photos?: string[];
   bio?: string;
   isVerified?: boolean;
   isVIP?: boolean;
   status?: string;
-  looking_for?: string;
-  tribe?: TribeType;
+  looking_for?: string | string[];
+  tribe?: string;
 }
 
 interface Props {
@@ -27,6 +29,7 @@ interface Props {
 export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewProfile }: Props) {
   const { blockedUsers, isVerified, isVIP } = useApp();
   const [selectedUser, setSelectedUser] = useState<ProfileRow | null>(null);
+  const myPrimaryPhoto = getPublicProfilePhoto(myProfile?.public_photos, myProfile?.avatar_url);
 
   // ✅ 2. 基於真實資料庫欄位進行過濾
   const filtered = profiles.filter(u => {
@@ -35,8 +38,8 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewPr
     
     // ⚠️ 防呆提醒：請確保您的 Supabase profiles 表格有對應的 looking_for 或 tribe 欄位
     // 若目前資料庫尚無這些欄位，過濾器將暫時返回 false 或需後續擴充 Schema
-    if (activeTribe === 'chat') return u.looking_for === 'Chat';
-    if (activeTribe === 'relationship') return u.looking_for === 'Relationship';
+    if (activeTribe === 'chat') return Array.isArray(u.looking_for) ? u.looking_for.includes('Chat') : u.looking_for === 'Chat';
+    if (activeTribe === 'relationship') return Array.isArray(u.looking_for) ? u.looking_for.includes('Relationship') : u.looking_for === 'Relationship';
     return u.tribe === activeTribe;
   });
 
@@ -67,8 +70,8 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewPr
           onClick={() => onViewProfile?.(myProfile ?? null)}
           className="relative aspect-square rounded-2xl overflow-hidden bg-slate-950 border-2 border-violet-500/50 shadow-lg shadow-violet-500/15 backdrop-blur-sm cursor-pointer group hover:shadow-violet-500/25 transition-all hover:scale-[1.02]"
         >
-          {myProfile?.avatar_url ? (
-            <img src={myProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
+          {myPrimaryPhoto ? (
+            <img src={myPrimaryPhoto} alt="Me" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-violet-700/50 to-blue-700/30 flex flex-col items-center justify-center gap-1">
               <Camera className="w-6 h-6 text-violet-400/60" />
@@ -79,7 +82,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewPr
           <div className="absolute bottom-2 left-2 right-2">
             <div className="flex items-center gap-1">
               <span className="text-white text-xs font-bold truncate">
-                {myProfile?.full_name || '你'}
+                {isValidProfileName(myProfile?.full_name ?? '') ? myProfile?.full_name : '尚未設定名稱'}
               </span>
               {isVerified && <BadgeCheck className="w-3 h-3 text-cyan-400" />}
               {isVIP && <Crown className="w-3 h-3 text-amber-500" />}
@@ -100,8 +103,8 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewPr
             className="relative aspect-square rounded-2xl overflow-hidden bg-slate-950 border border-white/10 backdrop-blur-sm cursor-pointer group hover:scale-[1.05] hover:border-violet-500/50 transition-all duration-200 hover:shadow-lg hover:shadow-violet-500/20"
           >
             {/* 頭像或漸層替代方案 */}
-            {user.avatar_url ? (
-              <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+            {getPublicProfilePhoto(user.public_photos, user.avatar_url) ? (
+              <img src={getPublicProfilePhoto(user.public_photos, user.avatar_url)} alt={user.full_name} className="w-full h-full object-cover" />
             ) : (
               <div className={`w-full h-full bg-gradient-to-br ${getGradient(index)} flex items-center justify-center`}>
                 <span className="text-white font-bold text-3xl opacity-80 mix-blend-overlay">
@@ -116,12 +119,12 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewPr
             <div className="absolute bottom-1.5 left-1.5 right-1.5">
               <div className="flex items-center gap-1">
                 {/* 注意：真實資料庫使用的是 full_name */}
-                <span className="text-white text-xs font-semibold truncate">{user.full_name}</span>
+                <span className="text-white text-xs font-semibold truncate">{isValidProfileName(user.full_name ?? '') ? user.full_name : '尚未設定名稱'}</span>
                 {user.isVerified && <BadgeCheck className="w-3 h-3 text-cyan-400 flex-shrink-0" />}
                 {user.isVIP && <Crown className="w-3 h-3 text-amber-500 flex-shrink-0" />}
               </div>
               {/* 若資料庫尚無 distance，預設顯示一段文字或空值 */}
-              <p className="text-white/50 text-[9px]">{user.bio ? user.bio.substring(0, 10) + '...' : '< 100m'}</p>
+              <p className="text-white/50 text-[9px]">{user.bio ? user.bio.substring(0, 10) + '...' : ''}</p>
             </div>
             
             {/* 真實的上線狀態指示器 (假設未來實作了 presence 功能) */}

@@ -13,6 +13,11 @@ import { useAuth } from '@/context/AuthContext';
 import * as nsfwjs from 'nsfwjs';
 // ✅ 總監新增：匯入 Supabase 客戶端，準備執行徹底登出
 import { supabase } from '@/supabaseClient'; 
+import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+import {
+  loadOwnerPrivatePhotos,
+  persistOwnerPrivatePhotos,
+} from '@/utils/privatePhotos';
 
 // ==========================================
 // 效能優化：共用 UI 切換開關 (統一深色科技感與漸層)
@@ -38,6 +43,10 @@ interface ProfileViewProps {
 export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const {
     isVIP,
+    hasVipAccess,
+    entitlementStatus,
+    entitlementError,
+    requestVipUpgrade,
     isVerified,
     myAvatar,
     setMyAvatar,
@@ -45,10 +54,32 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     setStealthMode,
     travelMode,
     setTravelMode,
-    setShowPaywall,
-    setIsVIP
   } = useApp();
   const { user } = useAuth();
+
+  const requestVipFeature = () => {
+    if (entitlementStatus === 'loading') {
+      alert('正在確認 VIP 資格，請稍後再試。');
+      return false;
+    }
+
+    if (entitlementStatus === 'error') {
+      alert(entitlementError ?? '無法確認 VIP 資格，請稍後再試。');
+      return false;
+    }
+
+    if (entitlementStatus === 'unauthenticated') {
+      alert('請先登入後再使用 VIP 功能。');
+      return false;
+    }
+
+    if (!hasVipAccess) {
+      requestVipUpgrade();
+      return false;
+    }
+
+    return true;
+  };
 
   // 實體 DOM 參照 (Ref)
   const fileRef = useRef<HTMLInputElement>(null);
@@ -138,28 +169,38 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const buildProfilePayload = () => ({
-    full_name: profile.name,
-    age: Number(profile.age) || null,
-    location: profile.location,
-    bio: profile.bio,
-    height: profile.height ? Number(profile.height) : null,
-    weight: profile.weight ? Number(profile.weight) : null,
-    role: profile.role,
-    tribe: profile.tribe,
-    looking_for: profile.lookingFor,
-    hide_distance: profile.hideDistance,
-    avatar_url: myAvatar,
+  const buildProfilePayload = (source = profile, avatarUrl = myAvatar) => ({
+    full_name: source.name,
+    age: Number(source.age) || null,
+    location: source.location,
+    bio: source.bio,
+    height: source.height ? Number(source.height) : null,
+    weight: source.weight ? Number(source.weight) : null,
+    role: source.role,
+    tribe: source.tribe,
+    looking_for: source.lookingFor,
+    hide_distance: source.hideDistance,
+    avatar_url: avatarUrl,
+    public_photos: source.publicPhotos,
   });
 
-  const persistProfileUpdate = async () => {
+  const persistProfileUpdate = async (source = profile, avatarUrl = myAvatar): Promise<{ privatePhotosSaved: boolean }> => {
     if (!user?.id) return;
 
-    const payload = buildProfilePayload();
+    const payload = buildProfilePayload(source, avatarUrl);
     const { error } = await supabase.from('profiles').update(payload).eq('id', user.id);
     if (error) {
       throw error;
     }
+
+    try {
+      await persistOwnerPrivatePhotos(user.id, source.privatePhotos);
+    } catch (error) {
+      console.error('儲存私密相簿失敗:', error);
+      return { privatePhotosSaved: false };
+    }
+
+    return { privatePhotosSaved: true };
   };
 
   const persistVipToggle = async (field: 'hide_distance', value: boolean) => {
@@ -181,40 +222,40 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       if (!user?.id) return;
 
       try {
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, age, location, height, weight, role, tribe, bio, looking_for, telegram, twitter, facebook, instagram, hide_distance, avatar_url, public_photos')
+          .eq('id', user.id)
+          .maybeSingle();
         if (error) throw error;
         if (!data || !isMounted) return;
         if (currentRunId !== loadProfileRunId.current) return;
 
+        const privatePhotos = await loadOwnerPrivatePhotos(user.id);
+        if (!isMounted || currentRunId !== loadProfileRunId.current) return;
+
         const nextProfile = {
-          name: data.full_name ?? data.name ?? '你',
-          age: String(data.age ?? 25),
-          location: data.location ?? '台北',
+          name: typeof data.full_name === 'string' ? data.full_name : '',
+          age: data.age == null ? '' : String(data.age),
+          location: typeof data.location === 'string' ? data.location : '',
           height: String(data.height ?? ''),
           weight: String(data.weight ?? ''),
-          role: Array.isArray(data.role) ? data.role : (typeof data.role === 'string' ? data.role.split(',').map((item: string) => item.trim()).filter(Boolean) : ['互補']),
-          tribe: data.tribe ?? 'wolf',
-          bio: data.bio ?? '熱愛探索新事物，週末喜歡去咖啡廳待上一整天。在這裡尋找有趣的靈魂！',
-          lookingFor: Array.isArray(data.looking_for) ? data.looking_for : (typeof data.looking_for === 'string' ? data.looking_for.split(',').map((item: string) => item.trim()).filter(Boolean) : ['約會', '交友']),
+          role: Array.isArray(data.role) ? data.role : (typeof data.role === 'string' ? data.role.split(',').map((item: string) => item.trim()).filter(Boolean) : []),
+          tribe: typeof data.tribe === 'string' ? data.tribe : '',
+          bio: typeof data.bio === 'string' ? data.bio : '',
+          lookingFor: Array.isArray(data.looking_for) ? data.looking_for : (typeof data.looking_for === 'string' ? data.looking_for.split(',').map((item: string) => item.trim()).filter(Boolean) : []),
           telegram: data.telegram ?? '',
           twitter: data.twitter ?? '',
           facebook: data.facebook ?? '',
           instagram: data.instagram ?? '',
           hideDistance: Boolean(data.hide_distance ?? false),
-          publicPhotos: Array.isArray(data.public_photos) ? data.public_photos : (data.avatar_url ? [data.avatar_url] : []),
-          privatePhotos: Array.isArray(data.private_photos) ? data.private_photos : [],
+          publicPhotos: Array.isArray(data.public_photos) ? data.public_photos : [],
+          privatePhotos,
         };
 
         setProfile(nextProfile);
         setEditForm(nextProfile);
-        if (typeof data.is_vip === 'boolean' && data.is_vip !== isVIP) {
-          setIsVIP(data.is_vip);
-        }
-        if (data.avatar_url) {
-          setMyAvatar(data.avatar_url);
-        } else if (Array.isArray(data.public_photos) && data.public_photos[0]) {
-          setMyAvatar(data.public_photos[0]);
-        }
+        setMyAvatar(getPublicProfilePhoto(data.public_photos, data.avatar_url) ?? null);
       } catch (error) {
         if (isMounted) {
           console.error('載入個人檔案失敗:', error);
@@ -243,19 +284,20 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   };
 
   const verifyImageSafe = async (dataUrl: string): Promise<boolean> => {
-    if (!nsfwModel) return false;
+    if (!nsfwModel) return true;
     return new Promise((resolve) => {
       const img = new Image();
-      img.src = dataUrl;
-      const timer = setTimeout(async () => {
+      img.onload = async () => {
         try {
           const canvas = document.createElement('canvas');
           canvas.width = img.naturalWidth || img.width;
           canvas.height = img.naturalHeight || img.height;
           const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          if (!ctx) {
+            resolve(true);
+            return;
           }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           const predictions = await nsfwModel.classify(canvas);
           const isUnsafe = predictions.some(
             (p: { className: string; probability: number }) =>
@@ -265,12 +307,11 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         } catch {
           resolve(true);
         }
-      }, 0);
-      img.onload = () => clearTimeout(timer);
+      };
       img.onerror = () => {
-        clearTimeout(timer);
         resolve(true);
       };
+      img.src = dataUrl;
     });
   };
 
@@ -285,13 +326,12 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       if (uploadTarget !== 'private') {
         setIsAnalyzing(true);
         isSafe = await verifyImageSafe(dataUrl);
-        setIsAnalyzing(false);
       }
 
       if (!isSafe) {
         // ✅ 改进：显示高质感 VIP 弹窗而非 alert
         alert('⚠️ 系統攔截：公開相片不可包含裸露或色情內容。若要上傳私密相片，請解鎖 VIP 私人相簿功能。');
-        setShowPaywall(true);
+        requestVipUpgrade();
         if (fileRef.current) fileRef.current.value = '';
         return;
       }
@@ -309,6 +349,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       }
     } catch {
       alert('圖片處理失敗，請重試。');
+    } finally {
       setIsAnalyzing(false);
     }
     if (fileRef.current) fileRef.current.value = '';
@@ -332,8 +373,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   };
 
   const triggerPhotoUpload = (target: 'public' | 'private' | 'avatar') => {
-    if (target === 'private' && editForm.privatePhotos.length >= 2 && !isVIP) {
-      setShowPaywall(true);
+    if (target === 'private' && editForm.privatePhotos.length >= 2 && !hasVipAccess) {
+      requestVipFeature();
       return;
     }
     setUploadTarget(target);
@@ -390,7 +431,9 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   }
 
   async function handleSaveProfile() {
-    if (!editForm.name.trim()) return alert('名稱不能為空白喔！');
+    if (!isValidProfileName(editForm.name)) {
+      return alert('名稱僅能使用中文或英文；中文最多 7 字，英文最多 14 字，且不可包含空白或特殊符號。');
+    }
     if (editForm.lookingFor.length === 0) return alert('請至少選擇一個尋找目標！');
     if (editForm.role.length === 0) return alert('請至少選擇一個角色偏好！');
 
@@ -398,11 +441,18 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     const previousAvatar = myAvatar;
 
     const nextProfile = { ...editForm };
+    const avatarUrl = nextProfile.publicPhotos[0] ?? myAvatar;
     setProfile(nextProfile);
-    if (nextProfile.publicPhotos.length > 0) setMyAvatar(nextProfile.publicPhotos[0]);
+    if (avatarUrl !== myAvatar) setMyAvatar(avatarUrl);
 
     try {
-      await persistProfileUpdate();
+      const saveResult = await persistProfileUpdate(nextProfile, avatarUrl);
+      window.dispatchEvent(new CustomEvent('gpulse-profile-updated'));
+      if (!saveResult.privatePhotosSaved) {
+        setProfile({ ...nextProfile, privatePhotos: previousProfile.privatePhotos });
+        alert('公開個人檔案已儲存，但私密相簿儲存失敗。請檢查網路後重試私密相簿。');
+        return;
+      }
       setIsEditModalOpen(false);
     } catch (error) {
       console.error('儲存個人檔案失敗:', error);
@@ -484,8 +534,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   };
 
   const handleVipToggle = async (type: 'stealth' | 'travel' | 'hideDistance' | 'undoSkip', nextValue: boolean) => {
-    if (!isVIP) {
-      setShowPaywall(true);
+    if (!hasVipAccess) {
+      requestVipFeature();
       return;
     }
 
@@ -564,7 +614,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         {/* 主畫面：資料預覽 */}
         <div className="text-center w-full px-4">
           <div className="flex items-center justify-center gap-2">
-            <h2 className="text-white font-bold text-2xl tracking-wide">{profile.name}, {profile.age}</h2>
+            <h2 className="text-white font-bold text-2xl tracking-wide">{isValidProfileName(profile.name) ? profile.name : '尚未設定名稱'}{profile.age ? `, ${profile.age}` : ''}</h2>
             {isVerified && <BadgeCheck className="w-6 h-6 text-cyan-400" />}
             {isVIP && <Crown className="w-5 h-5 text-amber-500" />}
           </div>
@@ -615,14 +665,22 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         </div>
       </div>
 
-      {!isVIP && (
+      {entitlementStatus === 'ready' && !isVIP && (
         <div className="px-4">
-          <button onClick={() => setShowPaywall(true)} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 hover:border-amber-500/50 transition-all mt-2">
+          <button onClick={requestVipUpgrade} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 hover:border-amber-500/50 transition-all mt-2">
             <Crown className="w-4 h-4 text-amber-500" />
             <span className="text-amber-500 text-sm font-medium">升級為 VIP</span>
             <ChevronRight className="w-3.5 h-3.5 text-amber-500/60" />
           </button>
         </div>
+      )}
+
+      {entitlementStatus === 'loading' && (
+        <p className="px-4 mt-3 text-center text-xs text-white/40">正在確認 VIP 資格…</p>
+      )}
+
+      {entitlementStatus === 'error' && (
+        <p className="px-4 mt-3 text-center text-xs text-rose-300">{entitlementError ?? '無法確認 VIP 資格。'}</p>
       )}
 
       {/* 主畫面：帳號設定選單 */}
@@ -704,7 +762,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               <div>
                 <h4 className="text-slate-300 text-sm font-semibold mb-3 flex items-center justify-between relative z-10">
                   <span className="flex items-center gap-2"><Lock className="w-4 h-4 text-amber-400"/> 隱私相簿 <span className="text-[10px] text-amber-400/60 font-normal">(免審核)</span></span>
-                  <span className="text-xs text-slate-500">{editForm.privatePhotos.length} / {isVIP ? '無上限' : '2 (免費)'}</span>
+                  <span className="text-xs text-slate-500">{editForm.privatePhotos.length} / {entitlementStatus === 'ready' ? (hasVipAccess ? '無上限' : '2 (免費)') : '確認中'}</span>
                 </h4>
                 <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar relative z-10">
                   {editForm.privatePhotos.map((photo, idx) => (
@@ -715,8 +773,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                     </div>
                   ))}
                   <div onClick={(e) => { e.stopPropagation(); triggerPhotoUpload('private'); }} className="shrink-0 w-24 h-32 rounded-xl bg-amber-950/20 border-2 border-dashed border-amber-500/30 flex flex-col items-center justify-center cursor-pointer hover:bg-amber-900/30 transition-colors relative overflow-hidden">
-                    {!isVIP && editForm.privatePhotos.length >= 2 ? <Crown className="w-6 h-6 text-amber-500 mb-1" /> : <Plus className="w-6 h-6 text-amber-500/70 mb-1" />}
-                    <span className="text-[10px] text-amber-500/70 font-medium px-1 text-center">{!isVIP && editForm.privatePhotos.length >= 2 ? '解鎖 VIP' : '新增相片'}</span>
+                    {entitlementStatus === 'ready' && !hasVipAccess && editForm.privatePhotos.length >= 2 ? <Crown className="w-6 h-6 text-amber-500 mb-1" /> : <Plus className="w-6 h-6 text-amber-500/70 mb-1" />}
+                    <span className="text-[10px] text-amber-500/70 font-medium px-1 text-center">{entitlementStatus !== 'ready' ? '資格確認中' : !hasVipAccess && editForm.privatePhotos.length >= 2 ? '解鎖 VIP' : '新增相片'}</span>
                   </div>
                 </div>
               </div>
@@ -726,7 +784,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               <div className="flex gap-4">
                 <div className="flex-2">
                   <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><User className="w-3.5 h-3.5" />名稱</label>
-                  <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none" />
+                  <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} maxLength={14} pattern="[A-Za-z\u4E00-\u9FFF]+" aria-invalid={Boolean(editForm.name) && !isValidProfileName(editForm.name)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none" />
+                  {editForm.name && !isValidProfileName(editForm.name) && <p className="mt-1 text-xs text-rose-400">僅限中文（最多 7 字）或英文（最多 14 字），不可混用空白或特殊符號。</p>}
                 </div>
                 <div className="flex-1">
                   <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Calendar className="w-3.5 h-3.5" />年齡</label>
@@ -847,10 +906,12 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                   <h4 className="text-white font-medium text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-violet-400" /> 誰來看我 (VIP)</h4>
                   <p className="text-slate-400 text-xs mt-1">有人瀏覽您的檔案時通知</p>
                 </div>
-                {isVIP ? (
+                {hasVipAccess ? (
                   <ToggleSwitch isOn={notifications.profileLike} onToggle={() => toggleSetting('profileLike', !notifications.profileLike)} />
+                ) : entitlementStatus === 'ready' ? (
+                  <button onClick={requestVipUpgrade} className="flex items-center gap-1 bg-amber-500/20 text-amber-500 px-3 py-1 rounded-full text-xs font-bold"><Crown className="w-3 h-3" /> 解鎖</button>
                 ) : (
-                  <button onClick={() => setShowPaywall(true)} className="flex items-center gap-1 bg-amber-500/20 text-amber-500 px-3 py-1 rounded-full text-xs font-bold"><Crown className="w-3 h-3" /> 解鎖</button>
+                  <span className="text-xs text-white/40">{entitlementStatus === 'loading' ? '確認中…' : '無法確認'}</span>
                 )}
               </div>
             </div>
