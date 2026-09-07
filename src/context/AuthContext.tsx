@@ -6,6 +6,8 @@ export interface AuthContextType {
   session: Session | null;
   user: User | null;
   isLoading: boolean;
+  isPasswordRecovery: boolean;
+  completePasswordRecovery: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -19,6 +21,7 @@ export function useAuth(): AuthContextType {
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   
   // ✅ 總監特調 PKCE 攔截器：同時監聽 search (?code=) 與 hash (#access_token=)
   const [isLoading, setIsLoading] = useState(() => {
@@ -58,6 +61,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(session?.user ?? null);
       setIsLoading(false);
 
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      if (event === 'SIGNED_OUT') {
+        setIsPasswordRecovery(false);
+      }
+
       // ✅ 解析成功後，將網址列的 ?code= 或 #access_token= 抹除
       if (event === 'SIGNED_IN') {
         window.history.replaceState(null, '', window.location.pathname);
@@ -68,7 +80,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, user, isLoading }}>
+    <AuthContext.Provider value={{
+      session,
+      user,
+      isLoading,
+      isPasswordRecovery,
+      completePasswordRecovery: () => setIsPasswordRecovery(false),
+    }}>
       {children}
     </AuthContext.Provider>
   );

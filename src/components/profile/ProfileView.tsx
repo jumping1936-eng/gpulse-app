@@ -462,12 +462,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     }
   }
 
-  function handleDeleteAccount() {
-    if (!window.confirm("🚨 警告：確定要刪除帳號嗎？\n此操作將清除您目前的所有資料。")) return;
-    if (!window.confirm("⚠️ 再次確認：\n您的所有配對紀錄、對話與相片將永遠無法復原。確定要繼續嗎？")) return;
-    if (!window.confirm("⛔ 最後警告：\n一旦刪除，【三個月內將無法以同一登入方式再申請帳號】！\n\n您真的確定要永久刪除嗎？")) return;
-  }
-
   const handleDownloadData = () => {
     setIsDownloading(true);
     setTimeout(() => {
@@ -709,11 +703,22 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             <span className="text-slate-300 text-sm">登出</span>
           </button>
 
-          <button onClick={handleDeleteAccount} className="w-full flex items-center justify-between px-4 py-3.5 bg-red-500/5 hover:bg-red-500/10 transition-colors">
-            <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled
+            aria-describedby="account-deletion-unavailable"
+            className="w-full flex items-center justify-between px-4 py-3.5 bg-red-500/5 text-left opacity-70 cursor-not-allowed"
+          >
+            <div className="flex items-start gap-3">
               <Trash2 className="w-4 h-4 text-red-500" />
-              <span className="text-red-500 font-medium text-sm">永久刪除帳號</span>
+              <div>
+                <span className="text-red-500 font-medium text-sm">永久刪除帳號目前無法使用</span>
+                <p id="account-deletion-unavailable" className="mt-1 text-xs text-slate-400">
+                  GPulse 尚未具備可安全刪除 Auth 帳號、關聯資料與媒體的後端服務；登出不會刪除帳號或資料。
+                </p>
+              </div>
             </div>
+            <span className="text-xs text-slate-500">未提供</span>
           </button>
         </div>
       </div>

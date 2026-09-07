@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Mail, Loader2, X, MailCheck, ArrowLeft, KeyRound } from 'lucide-react';
+import { Activity, Mail, Loader2, X, MailCheck, KeyRound } from 'lucide-react';
 // ⚠️ 確保這裡的路徑與您的專案相符
 import { getLoginCopy } from '../i18n/loginTranslations';
 import { supabase } from '../supabaseClient'; 
@@ -14,9 +14,15 @@ const LANGUAGES = [
 
 interface Props {
   onLogin: () => void;
+  isPasswordRecovery?: boolean;
+  onPasswordRecoveryComplete?: () => void;
 }
 
-export default function LoginScreen({ onLogin }: Props) {
+export default function LoginScreen({
+  onLogin,
+  isPasswordRecovery = false,
+  onPasswordRecoveryComplete,
+}: Props) {
   // === 狀態管理 (保留您原有的所有狀態) ===
   const [lang] = useState(LANGUAGES[0]);
   
@@ -35,11 +41,16 @@ export default function LoginScreen({ onLogin }: Props) {
 
   // 忘記密碼相關狀態
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [forgotStep, setForgotStep] = useState<'email' | 'otp'>('email');
   const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotOtp, setForgotOtp] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoverySuccess, setRecoverySuccess] = useState(false);
 
   // === 記住我功能 ===
   useEffect(() => {
@@ -166,53 +177,65 @@ export default function LoginScreen({ onLogin }: Props) {
 
   // === 忘記密碼邏輯 (保留您的原版邏輯) ===
   async function handleForgotSendEmail() {
-    if (!forgotEmail.trim()) return;
+    const normalizedEmail = forgotEmail.trim();
+    if (!normalizedEmail) return;
+
     setForgotLoading(true);
     setForgotError('');
+    setForgotSuccess(false);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail);
-      if (error) setForgotError('發送失敗：' + error.message);
-      else setForgotStep('otp'); 
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '未知錯誤';
-      setForgotError('系統發生錯誤：' + message);
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: window.location.origin,
+      });
+
+      if (error) {
+        setForgotError('目前無法寄送重設連結，請稍後再試。');
+        return;
+      }
+
+      setForgotSuccess(true);
+    } catch {
+      setForgotError('目前無法寄送重設連結，請稍後再試。');
     } finally {
       setForgotLoading(false);
     }
   }
 
-  async function handleForgotVerifyOtp() {
-    if (forgotOtp.length !== 8) return;
-    setForgotLoading(true);
-    setForgotError(''); 
-    
+  async function handlePasswordRecoverySubmit() {
+    if (newPassword.length < 8) {
+      setRecoveryError('新密碼至少需要 8 個字元。');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setRecoveryError('兩次輸入的新密碼不一致。');
+      return;
+    }
+
+    setRecoveryLoading(true);
+    setRecoveryError('');
     try {
-      localStorage.setItem('gpulse_recovery_mode', 'true');
-      const { error } = await supabase.auth.verifyOtp({ 
-        email: forgotEmail, 
-        token: forgotOtp, 
-        type: 'recovery' 
-      });
-      
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
-        localStorage.removeItem('gpulse_recovery_mode');
-        setForgotError('驗證碼無效或已過期。(' + error.message + ')');
+        setRecoveryError('無法更新密碼。重設連結可能已過期，請重新申請。');
+        return;
       }
-    } catch (err: unknown) {
-      localStorage.removeItem('gpulse_recovery_mode');
-      const message = err instanceof Error ? err.message : '未知錯誤';
-      setForgotError('系統發生錯誤：' + message);
+
+      setNewPassword('');
+      setConfirmPassword('');
+      setRecoverySuccess(true);
+    } catch {
+      setRecoveryError('無法更新密碼。請稍後再試或重新申請重設連結。');
     } finally {
-      setForgotLoading(false);
+      setRecoveryLoading(false);
     }
   }
 
   function closeForgotPassword() {
     setShowForgotPassword(false);
-    setForgotStep('email');
     setForgotEmail('');
-    setForgotOtp('');
     setForgotError('');
+    setForgotSuccess(false);
   }
 
   const t = getLoginCopy(lang.code);
@@ -296,15 +319,52 @@ export default function LoginScreen({ onLogin }: Props) {
       </div>
 
       {/* 忘記密碼 Modal (保留您的原版介面) */}
+      {isPasswordRecovery && !showForgotPassword && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/95 px-6 backdrop-blur-xl">
+          <div className="w-full max-w-sm rounded-2xl border border-violet-500/30 bg-slate-900 p-6 shadow-2xl">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/15">
+                <KeyRound className="h-5 w-5 text-violet-300" />
+              </div>
+              <div>
+                <h2 className="font-bold text-white">設定新密碼</h2>
+                <p className="text-xs text-white/45">請為帳號設定新的登入密碼。</p>
+              </div>
+            </div>
+
+            {recoverySuccess ? (
+              <div className="space-y-5 text-center">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+                  密碼已成功更新。
+                </div>
+                <button type="button" onClick={onPasswordRecoveryComplete} className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 py-3 text-sm font-bold text-white">
+                  繼續使用 GPulse
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={(event) => { event.preventDefault(); void handlePasswordRecoverySubmit(); }} className="space-y-4">
+                {recoveryError && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-xs leading-relaxed text-red-300">{recoveryError}</div>}
+                <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="新密碼（至少 8 個字元）" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-500/60" />
+                <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="確認新密碼" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-500/60" />
+                <button type="submit" disabled={recoveryLoading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50">
+                  {recoveryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {recoveryLoading ? '更新中…' : '更新密碼'}
+                </button>
+                <button type="button" onClick={() => setShowForgotPassword(true)} className="w-full text-xs text-violet-300/80 hover:text-violet-200">
+                  連結無效或過期？重新申請重設連結
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {showForgotPassword && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden" style={{ animation: 'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards' }}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-slate-900/50">
               <div className="flex items-center gap-2">
-                {forgotStep !== 'email' && (
-                  <button type="button" onClick={() => { setForgotStep('email'); setForgotError(''); }} className="text-white/40 hover:text-white/70 transition-colors"><ArrowLeft className="w-4 h-4" /></button>
-                )}
-                <h2 className="text-white font-bold text-base tracking-wide">{forgotStep === 'email' ? '忘記密碼' : '安全驗證'}</h2>
+                <h2 className="text-white font-bold text-base tracking-wide">忘記密碼</h2>
               </div>
               <button type="button" onClick={closeForgotPassword} className="text-white/40 hover:text-white/70 transition-colors bg-white/5 rounded-full p-1.5 hover:bg-red-500/20 hover:text-red-400"><X className="w-4 h-4" /></button>
             </div>
@@ -312,27 +372,15 @@ export default function LoginScreen({ onLogin }: Props) {
             <div className="px-6 py-8">
               {forgotError && <div className="mb-5 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center leading-relaxed font-medium">{forgotError}</div>}
 
-              {forgotStep === 'email' && (
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <p className="text-white/50 text-sm leading-relaxed mb-6">請輸入您註冊時使用的電子郵件，我們將發送一組 <span className="text-violet-400 font-medium">8 位數驗證碼</span> 給您。</p>
+              <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                  <p className="text-white/50 text-sm leading-relaxed mb-6">請輸入註冊時使用的電子郵件。我們會寄送密碼重設連結；為保護帳號隱私，系統不會揭露此電子郵件是否已註冊。</p>
                   <input type="email" placeholder={t.emailAddress} value={forgotEmail} onChange={e => { setForgotEmail(e.target.value); setForgotError(''); }} onKeyDown={e => e.key === 'Enter' && handleForgotSendEmail()} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-violet-500/60 transition-all mb-6" />
+                  {forgotSuccess && <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center text-xs leading-relaxed text-emerald-200">若此電子郵件可接收重設，系統已寄出連結。請查看信箱並使用連結回到 GPulse 設定新密碼。</div>}
                   <button type="button" onClick={handleForgotSendEmail} disabled={!forgotEmail.trim() || forgotLoading} className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2 text-sm tracking-wide">
                     {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
-                    {forgotLoading ? '發送中...' : '發送驗證碼'}
+                    {forgotLoading ? '發送中...' : '寄送重設連結'}
                   </button>
-                </div>
-              )}
-
-              {forgotStep === 'otp' && (
-                <div className="flex flex-col items-center animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="w-16 h-16 rounded-full bg-violet-500/10 flex items-center justify-center mb-4 border border-violet-500/20"><KeyRound className="w-8 h-8 text-violet-400" /></div>
-                  <p className="text-white/70 text-sm text-center mb-6 leading-relaxed">驗證碼已發送至 <br/><span className="text-violet-400 font-medium text-base">{forgotEmail}</span></p>
-                  <input type="text" maxLength={8} value={forgotOtp} onChange={e => { setForgotError(''); setForgotOtp(e.target.value.replace(/\D/g, '')); }} onKeyDown={e => e.key === 'Enter' && handleForgotVerifyOtp()} placeholder="12345678" className="w-full bg-black/40 border border-violet-500/40 rounded-xl px-4 py-4 text-violet-400 text-center text-2xl tracking-[0.4em] font-mono focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 transition-all mb-6 shadow-inner" />
-                  <button type="button" onClick={handleForgotVerifyOtp} disabled={forgotOtp.length !== 8 || forgotLoading} className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm tracking-wide shadow-lg shadow-violet-500/20">
-                    {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : '驗證代碼'}
-                  </button>
-                </div>
-              )}
+              </div>
             </div>
           </div>
         </div>

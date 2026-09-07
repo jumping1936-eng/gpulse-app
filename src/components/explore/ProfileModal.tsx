@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/supabaseClient';
 import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
 
 interface ProfileUser {
   id?: string;
@@ -29,13 +30,21 @@ interface Props {
 }
 
 export default function ProfileModal({ user, onClose }: Props) {
-  const { blockUser } = useApp();
+  const { blockUser, blockedUsers, blockListStatus } = useApp();
   const { user: currentUser } = useAuth();
   
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [showPrivateAlbum, setShowPrivateAlbum] = useState(false);
+  const [likeState, setLikeState] = useState<'idle' | 'submitting' | 'sent' | 'cooldown' | 'error'>('idle');
+  const [boostState, setBoostState] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
+  const [interactionMessage, setInteractionMessage] = useState<string | null>(null);
+  const [interactionMessageIsError, setInteractionMessageIsError] = useState(false);
   const primaryPhoto = getPublicProfilePhoto(user.public_photos, user.avatar_url);
   const displayName = isValidProfileName(user.full_name ?? '') ? user.full_name : '';
+  const targetId = user.id ?? null;
+  const hasInteractionTarget = Boolean(targetId && currentUser?.id && targetId !== currentUser.id);
+  const isBlocked = Boolean(targetId && blockedUsers.has(targetId));
+  const interactionUnavailable = !hasInteractionTarget || isBlocked || blockListStatus !== 'ready';
 
   async function handleBlock() {
     if (!user?.id || !currentUser?.id) return;
@@ -52,10 +61,98 @@ export default function ProfileModal({ user, onClose }: Props) {
     }
   }
 
-  function handleLike() {
+  async function handleLike() {
+    if (!targetId || !currentUser?.id) {
+      setInteractionMessage('請先登入後再傳送心動。');
+      setInteractionMessageIsError(true);
+      return;
+    }
+    if (targetId === currentUser.id) {
+      setInteractionMessage('你無法對自己傳送心動。');
+      setInteractionMessageIsError(true);
+      return;
+    }
+    if (blockListStatus !== 'ready') {
+      setInteractionMessage('正在確認封鎖名單，暫時無法互動。');
+      setInteractionMessageIsError(true);
+      return;
+    }
+    if (blockedUsers.has(targetId)) {
+      setInteractionMessage('你已封鎖此使用者，無法互動。');
+      setInteractionMessageIsError(true);
+      return;
+    }
+
+    setLikeState('submitting');
+    setInteractionMessage(null);
+    setInteractionMessageIsError(false);
+    try {
+      const result = await sendLikeWithCooldown(targetId);
+      if (result === 'in-flight') {
+        setLikeState('idle');
+        setInteractionMessage('心動正在送出，請稍候。');
+        setInteractionMessageIsError(false);
+        return;
+      }
+      if (result === 'cooldown') {
+        setLikeState('cooldown');
+        setInteractionMessage('你最近已傳送過心動，請 24 小時後再試。');
+        setInteractionMessageIsError(false);
+        return;
+      }
+      setLikeState('sent');
+      setInteractionMessage('心動已送出。');
+      setInteractionMessageIsError(false);
+    } catch (error) {
+      console.error('傳送心動失敗:', error);
+      setLikeState('error');
+      setInteractionMessage('無法傳送心動，請稍後再試。');
+      setInteractionMessageIsError(true);
+    }
   }
 
-  function handleBoost() {
+  async function handleBoost() {
+    if (!targetId || !currentUser?.id) {
+      setInteractionMessage('請先登入後再推送。');
+      setInteractionMessageIsError(true);
+      return;
+    }
+    if (targetId === currentUser.id) {
+      setInteractionMessage('你無法推送自己的個人檔案。');
+      setInteractionMessageIsError(true);
+      return;
+    }
+    if (blockListStatus !== 'ready') {
+      setInteractionMessage('正在確認封鎖名單，暫時無法互動。');
+      setInteractionMessageIsError(true);
+      return;
+    }
+    if (blockedUsers.has(targetId)) {
+      setInteractionMessage('你已封鎖此使用者，無法互動。');
+      setInteractionMessageIsError(true);
+      return;
+    }
+
+    setBoostState('submitting');
+    setInteractionMessage(null);
+    setInteractionMessageIsError(false);
+    try {
+      const wasSubmitted = await boostUserProfile(targetId);
+      if (!wasSubmitted) {
+        setBoostState('idle');
+        setInteractionMessage('推送正在送出，請稍候。');
+        setInteractionMessageIsError(false);
+        return;
+      }
+      setBoostState('sent');
+      setInteractionMessage('推送已送出。');
+      setInteractionMessageIsError(false);
+    } catch (error) {
+      console.error('推送失敗:', error);
+      setBoostState('error');
+      setInteractionMessage('無法推送，請稍後再試。');
+      setInteractionMessageIsError(true);
+    }
   }
 
   async function handleRequestAlbum() {
@@ -180,25 +277,30 @@ export default function ProfileModal({ user, onClose }: Props) {
           <div className="flex gap-2">
             <button
               onClick={handleLike}
-              disabled
-              className="flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 pointer-events-auto transform opacity-50 cursor-not-allowed bg-pink-500/20 border border-pink-500/40 text-pink-400 shadow-lg shadow-pink-500/10 scale-[0.98]"
+              disabled={interactionUnavailable || likeState === 'submitting' || likeState === 'sent' || likeState === 'cooldown'}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 pointer-events-auto transform ${interactionUnavailable || likeState === 'submitting' || likeState === 'sent' || likeState === 'cooldown' ? 'opacity-50 cursor-not-allowed scale-[0.98]' : 'hover:scale-[1.02] active:scale-95'} bg-pink-500/20 border border-pink-500/40 text-pink-400 shadow-lg shadow-pink-500/10`}
             >
-              <Heart className="w-5 h-5 transition-all duration-200 fill-pink-400 scale-110" />
-              已發送
+              {likeState === 'sent' || likeState === 'cooldown' ? <Heart className="w-5 h-5 transition-all duration-200 fill-pink-400 scale-110" /> : <Heart className="w-5 h-5 transition-all duration-200" />}
+              {likeState === 'submitting' ? '傳送中' : likeState === 'sent' ? '已發送' : likeState === 'cooldown' ? '冷卻中' : '心動'}
             </button>
             <button
               onClick={handleBoost}
-              disabled
-              className="flex-[1.2] flex flex-col items-center justify-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 rounded-2xl font-bold text-xs transition-all duration-200 shadow-lg shadow-orange-500/20 border border-amber-300/30 pointer-events-auto opacity-50 cursor-not-allowed"
+              disabled={interactionUnavailable || boostState === 'submitting' || boostState === 'sent'}
+              className={`flex-[1.2] flex flex-col items-center justify-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 rounded-2xl font-bold text-xs transition-all duration-200 shadow-lg shadow-orange-500/20 border border-amber-300/30 pointer-events-auto ${interactionUnavailable || boostState === 'submitting' || boostState === 'sent' ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-95'}`}
             >
               <Rocket className="w-5 h-5 transition-all duration-200" />
-              已推送
+              {boostState === 'submitting' ? '推送中' : boostState === 'sent' ? '已推送' : '推送'}
             </button>
             <button onClick={handleMessage} className="flex-1 flex flex-col items-center justify-center gap-1 bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 hover:scale-[1.02] active:scale-95 pointer-events-auto">
               <MessageCircle className="w-5 h-5"/>
               Message
             </button>
           </div>
+          {interactionMessage && (
+            <p className={`mt-2 text-center text-xs ${interactionMessageIsError ? 'text-rose-300' : 'text-white/60'}`} role="status" aria-live="polite">
+              {interactionMessage}
+            </p>
+          )}
         </div>
 
         {showBlockConfirm && (

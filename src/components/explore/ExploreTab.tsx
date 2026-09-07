@@ -7,6 +7,7 @@ import ExploreGrid from './ExploreGrid';
 import ProfileModal from './ProfileModal';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
+import { useApp } from '@/context/AppContext';
 import { ArrowUpRight, Crown, MapPin, Compass } from 'lucide-react';
 import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 
@@ -118,12 +119,12 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
 
 export default function ExploreTab() {
   const { user: authUser } = useAuth();
+  const { blockedUsers, blockListStatus } = useApp();
   const [viewingStory, setViewingStory] = useState<StoryUser | null>(null);
   const [activeTribe, setActiveTribe] = useState<TribeType>('all');
 
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
   const [myProfile, setMyProfile] = useState<ProfileRecord | null>(null);
-  const [users, setUsers] = useState<ProfileRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'vip'>('all');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -142,12 +143,10 @@ export default function ExploreTab() {
       const otherProfiles = nextUsers.filter(profile => profile.id !== authUser?.id);
       const mine = nextUsers.find(profile => profile.id === authUser?.id) ?? null;
 
-      setUsers(nextUsers);
       setProfiles(otherProfiles);
       setMyProfile(mine);
     } catch (error) {
       console.error('🔴 獲取真實名片失敗:', error);
-      setUsers([]);
       setProfiles([]);
       setMyProfile(null);
     } finally {
@@ -159,7 +158,6 @@ export default function ExploreTab() {
     if (authUser) {
       fetchRealProfiles();
     } else {
-      setUsers([]);
       setProfiles([]);
       setMyProfile(null);
       setIsLoading(false);
@@ -175,8 +173,19 @@ export default function ExploreTab() {
     return () => window.removeEventListener('gpulse-profile-updated', handleProfileUpdated);
   }, [fetchRealProfiles]);
 
+  const visibleProfiles = useMemo(() => {
+    if (blockListStatus !== 'ready') return [];
+    return profiles.filter((profile) => !blockedUsers.has(profile.id));
+  }, [blockListStatus, blockedUsers, profiles]);
+
+  useEffect(() => {
+    if (selectedProfile && !visibleProfiles.some((profile) => profile.id === selectedProfile.id)) {
+      setSelectedProfile(null);
+    }
+  }, [selectedProfile, visibleProfiles]);
+
   const nearbyUsers = useMemo<NearbyUser[]>(() => {
-    const source = users;
+    const source = visibleProfiles;
     return source.slice(0, 5).map((user) => ({
       id: user.id,
       full_name: user.full_name,
@@ -187,9 +196,9 @@ export default function ExploreTab() {
       isOnline: user.status === 'online',
       accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][user.id.charCodeAt(0) % 5],
     }));
-  }, [users]);
+  }, [visibleProfiles]);
   const recommendations = useMemo<Recommendation[]>(() => {
-    const source = users;
+    const source = visibleProfiles;
     return source.slice(5).map((user) => {
       return {
         id: user.id,
@@ -201,7 +210,7 @@ export default function ExploreTab() {
         isVIP: user.is_vip,
       };
     });
-  }, [users]);
+  }, [visibleProfiles]);
 
   const filteredRecommendations = useMemo(() => {
     const items = [...recommendations];
@@ -226,6 +235,17 @@ export default function ExploreTab() {
   return (
     <div className="relative h-full overflow-y-auto bg-slate-950 pb-28">
       <section className="px-4 pt-5">
+        {!isLoading && blockListStatus !== 'ready' && (
+          <div className={`mb-4 rounded-xl border p-3 text-center text-xs ${
+            blockListStatus === 'loading'
+              ? 'border-violet-500/20 bg-violet-500/5 text-violet-200/70'
+              : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+          }`}>
+            {blockListStatus === 'loading'
+              ? '正在確認封鎖名單…'
+              : '目前無法安全載入探索名單，請稍後再試。'}
+          </div>
+        )}
         <div className="mb-3 flex items-center justify-between">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Nearby</p>
@@ -401,11 +421,11 @@ export default function ExploreTab() {
         )}
       </section>
 
-      <StoriesBar onViewStory={setViewingStory} profiles={profiles} myProfile={myProfile} />
+      <StoriesBar onViewStory={setViewingStory} profiles={visibleProfiles} myProfile={myProfile} />
       <TribeFilters active={activeTribe} onChange={setActiveTribe} />
       <ExploreGrid
         activeTribe={activeTribe}
-        profiles={profiles}
+        profiles={visibleProfiles}
         myProfile={myProfile}
         onViewProfile={setSelectedProfile}
       />

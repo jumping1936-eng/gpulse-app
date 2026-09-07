@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, Check, Crown, Heart, MapPin, MessageCircle, Rocket, Sparkles } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import ProfileModal from '@/components/explore/ProfileModal';
+import { useApp } from '@/context/AppContext';
+import { useAuth } from '@/context/AuthContext';
 import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
 
 interface ProfileRecord {
   id: string;
@@ -41,6 +44,10 @@ interface Recommendation {
   isVIP: boolean;
 }
 
+interface InteractionFeedback {
+  message: string;
+  tone: 'error' | 'info';
+}
 
 
 const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecord>): ProfileRecord[] => {
@@ -115,21 +122,24 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
 };
 
 export default function HomeFeed() {
+  const { blockedUsers, blockListStatus } = useApp();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<ProfileRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'vip'>('all');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<ProfileRecord | null>(null);
-  const [likedIds, setLikedIds] = useState<string[]>([]);
-  const [boostedIds, setBoostedIds] = useState<string[]>([]);
+  const [likeStates, setLikeStates] = useState<Record<string, 'idle' | 'submitting' | 'sent' | 'cooldown' | 'error'>>({});
+  const [boostStates, setBoostStates] = useState<Record<string, 'idle' | 'submitting' | 'sent' | 'error'>>({});
+  const [interactionFeedback, setInteractionFeedback] = useState<Record<string, InteractionFeedback>>({});
   const [messagedIds, setMessagedIds] = useState<string[]>([]);
   const [actionTimestamps, setActionTimestamps] = useState<Record<string, number>>({});
 
   const TWENTY_FOUR_HOURS = 1000 * 60 * 60 * 24;
 
   const openProfile = (userId: string) => {
-    const nextProfile = users.find((user) => user.id === userId) ?? null;
+    const nextProfile = visibleUsers.find((user) => user.id === userId) ?? null;
     if (!nextProfile) return;
     setSelectedUserId(userId);
     setSelectedProfile(nextProfile);
@@ -178,8 +188,19 @@ export default function HomeFeed() {
     };
   }, []);
 
+  const visibleUsers = useMemo(() => {
+    if (blockListStatus !== 'ready') return [];
+    return users.filter((profile) => !blockedUsers.has(profile.id));
+  }, [blockListStatus, blockedUsers, users]);
+
+  useEffect(() => {
+    if (selectedProfile && !visibleUsers.some((profile) => profile.id === selectedProfile.id)) {
+      setSelectedProfile(null);
+    }
+  }, [selectedProfile, visibleUsers]);
+
   const nearbyUsers = useMemo<NearbyUser[]>(() => {
-    const source = users;
+    const source = visibleUsers;
 
     return source.slice(0, 5).map((user) => ({
       id: user.id,
@@ -191,10 +212,10 @@ export default function HomeFeed() {
       isOnline: user.status === 'online',
       accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][user.id.charCodeAt(0) % 5],
     }));
-  }, [users]);
+  }, [visibleUsers]);
 
   const recommendations = useMemo<Recommendation[]>(() => {
-    const source = users;
+    const source = visibleUsers;
 
     return source.slice(5).map((user) => {
       return {
@@ -207,7 +228,7 @@ export default function HomeFeed() {
         isVIP: user.is_vip,
       };
     });
-  }, [users]);
+  }, [visibleUsers]);
 
   const filteredRecommendations = useMemo(() => {
     const items = [...recommendations];
@@ -230,58 +251,109 @@ export default function HomeFeed() {
     setSelectedUserId((prev) => prev ?? filteredRecommendations[0].id);
   }, [filteredRecommendations]);
 
-  const isWithin24Hours = (id: string, type: 'like' | 'boost' | 'message') => {
+  const isWithin24Hours = (id: string, type: 'message') => {
     const key = `${type}:${id}`;
     const lastAt = actionTimestamps[key];
     if (!lastAt) return false;
     return Date.now() - lastAt < TWENTY_FOUR_HOURS;
   };
 
-  const handleAction = (type: 'like' | 'boost' | 'message', item: Recommendation) => {
-    const key = `${type}:${item.id}`;
-    if (isWithin24Hours(item.id, type)) {
-      const labelMap = {
-        like: '心動',
-        boost: '推送',
-        message: '訊息',
-      };
-      alert(`${labelMap[type]}已在 24 小時內使用過，請稍後再試。`);
+  const canInteractWith = (targetId: string) => (
+    Boolean(currentUser?.id)
+    && currentUser.id !== targetId
+    && blockListStatus === 'ready'
+    && !blockedUsers.has(targetId)
+  );
+
+  const handleLike = async (item: Recommendation) => {
+    if (!canInteractWith(item.id)) {
+      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '目前無法安全傳送心動。', tone: 'error' } }));
       return;
     }
 
-    if (type === 'like') {
-      setLikedIds((prev) => [...new Set([...prev, item.id])]);
+    setLikeStates((previous) => ({ ...previous, [item.id]: 'submitting' }));
+    setInteractionFeedback((previous) => {
+      const nextFeedback = { ...previous };
+      delete nextFeedback[item.id];
+      return nextFeedback;
+    });
+
+    try {
+      const result = await sendLikeWithCooldown(item.id);
+      if (result === 'in-flight') {
+        setLikeStates((previous) => ({ ...previous, [item.id]: 'idle' }));
+        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '心動正在送出，請稍候。', tone: 'info' } }));
+        return;
+      }
+      setLikeStates((previous) => ({ ...previous, [item.id]: result === 'sent' ? 'sent' : 'cooldown' }));
+      if (result === 'cooldown') {
+        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '你最近已傳送過心動，請 24 小時後再試。', tone: 'info' } }));
+      }
+    } catch (error) {
+      console.error('HomeFeed 傳送心動失敗:', error);
+      setLikeStates((previous) => ({ ...previous, [item.id]: 'error' }));
+      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '無法傳送心動，請稍後再試。', tone: 'error' } }));
     }
-    if (type === 'boost') {
-      setBoostedIds((prev) => [...new Set([...prev, item.id])]);
+  };
+
+  const handleBoost = async (item: Recommendation) => {
+    if (!canInteractWith(item.id)) {
+      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '目前無法安全推送。', tone: 'error' } }));
+      return;
     }
-    if (type === 'message') {
-      setMessagedIds((prev) => [...new Set([...prev, item.id])]);
+
+    setBoostStates((previous) => ({ ...previous, [item.id]: 'submitting' }));
+    setInteractionFeedback((previous) => {
+      const nextFeedback = { ...previous };
+      delete nextFeedback[item.id];
+      return nextFeedback;
+    });
+
+    try {
+      const wasSubmitted = await boostUserProfile(item.id);
+      if (!wasSubmitted) {
+        setBoostStates((previous) => ({ ...previous, [item.id]: 'idle' }));
+        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '推送正在送出，請稍候。', tone: 'info' } }));
+        return;
+      }
+      setBoostStates((previous) => ({ ...previous, [item.id]: 'sent' }));
+    } catch (error) {
+      console.error('HomeFeed 推送失敗:', error);
+      setBoostStates((previous) => ({ ...previous, [item.id]: 'error' }));
+      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '無法推送，請稍後再試。', tone: 'error' } }));
     }
+  };
+
+  const handleMessage = (item: Recommendation) => {
+    const type = 'message';
+    const key = `${type}:${item.id}`;
+    if (isWithin24Hours(item.id, type)) {
+      alert('訊息已在 24 小時內使用過，請稍後再試。');
+      return;
+    }
+
+    setMessagedIds((prev) => [...new Set([...prev, item.id])]);
 
     setActionTimestamps((prev) => ({ ...prev, [key]: Date.now() }));
 
-    if (type === 'message') {
-      setSelectedUserId(item.id);
-      const targetUser = {
+    setSelectedUserId(item.id);
+    const targetUser = {
+      id: item.id,
+      full_name: item.name,
+      avatar_url: item.avatar,
+      age: item.age,
+      bio: item.bio,
+      city: item.city,
+      status: 'online',
+      other_user: {
         id: item.id,
         full_name: item.name,
         avatar_url: item.avatar,
-        age: item.age,
         bio: item.bio,
-        city: item.city,
-        status: 'online',
-        other_user: {
-          id: item.id,
-          full_name: item.name,
-          avatar_url: item.avatar,
-          bio: item.bio,
-        },
-      };
+      },
+    };
     window.dispatchEvent(new CustomEvent('jump-to-chat', { detail: targetUser }));
-    return;
-  }
-};
+  };
 
   const selectedUser = filteredRecommendations.find((item) => item.id === selectedUserId) ?? filteredRecommendations[0] ?? null;
 
@@ -295,11 +367,25 @@ export default function HomeFeed() {
           </div>
         )}
 
-        {!isLoading && !fetchError && users.length === 0 && (
+        {!isLoading && !fetchError && blockListStatus === 'ready' && visibleUsers.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-white/40">
             <Sparkles className="w-12 h-12 text-violet-400/40" />
             <p className="text-sm font-medium">目前還沒有其他使用者</p>
             <p className="text-xs text-white/25">邀請朋友加入，或稍後再回來看看</p>
+          </div>
+        )}
+
+        {!isLoading && !fetchError && blockListStatus === 'loading' && (
+          <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/40">
+            <Sparkles className="w-8 h-8 text-violet-400/40 animate-pulse" />
+            <p className="text-sm">正在確認封鎖名單…</p>
+          </div>
+        )}
+
+        {!isLoading && !fetchError && (blockListStatus === 'error' || blockListStatus === 'unauthenticated') && (
+          <div className="flex flex-col items-center justify-center py-10 gap-2 text-rose-200/80">
+            <Sparkles className="w-8 h-8 text-rose-400/50" />
+            <p className="text-sm">目前無法安全載入探索名單，請稍後再試。</p>
           </div>
         )}
 
@@ -469,12 +555,13 @@ export default function HomeFeed() {
           ) : (
             <div className="columns-2 gap-3">
               {filteredRecommendations.map((item) => {
-                const isLiked = likedIds.includes(item.id);
-                const isBoosted = boostedIds.includes(item.id);
+                const likeState = likeStates[item.id] ?? 'idle';
+                const boostState = boostStates[item.id] ?? 'idle';
                 const isMessaged = messagedIds.includes(item.id);
-                const likeCooldown = isWithin24Hours(item.id, 'like');
-                const boostCooldown = isWithin24Hours(item.id, 'boost');
                 const messageCooldown = isWithin24Hours(item.id, 'message');
+                const interactionDisabled = !canInteractWith(item.id);
+                const likeDisabled = interactionDisabled || likeState === 'submitting' || likeState === 'sent' || likeState === 'cooldown';
+                const boostDisabled = interactionDisabled || boostState === 'submitting' || boostState === 'sent';
 
                 return (
                   <article
@@ -518,43 +605,43 @@ export default function HomeFeed() {
                       <div className="flex items-center gap-2 pt-1">
                         <button
                           type="button"
-                          disabled
+                          disabled={likeDisabled}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAction('like', item);
+                            void handleLike(item);
                           }}
-                          className={`flex flex-1 items-center justify-center gap-1 rounded-full px-3 py-2 text-[11px] font-semibold transition opacity-50 cursor-not-allowed ${
-                            isLiked || likeCooldown
+                          className={`flex flex-1 items-center justify-center gap-1 rounded-full px-3 py-2 text-[11px] font-semibold transition ${likeDisabled ? 'opacity-50 cursor-not-allowed' : ''} ${
+                            likeState === 'sent' || likeState === 'cooldown'
                               ? 'bg-white/10 text-violet-200 border border-violet-500/30'
                               : 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg shadow-violet-500/20'
                           }`}
                         >
-                          {isLiked || likeCooldown ? <Check className="h-3.5 w-3.5" /> : <Heart className="h-3.5 w-3.5" />}
-                          {isLiked || likeCooldown ? '已心動' : '心動'}
+                          {likeState === 'sent' || likeState === 'cooldown' ? <Check className="h-3.5 w-3.5" /> : <Heart className="h-3.5 w-3.5" />}
+                          {likeState === 'submitting' ? '傳送中' : likeState === 'sent' ? '已心動' : likeState === 'cooldown' ? '冷卻中' : '心動'}
                         </button>
 
                         <button
                           type="button"
-                          disabled
+                          disabled={boostDisabled}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAction('boost', item);
+                            void handleBoost(item);
                           }}
-                          className={`flex h-9 w-9 items-center justify-center rounded-full transition opacity-50 cursor-not-allowed ${
-                            isBoosted || boostCooldown
+                          className={`flex h-9 w-9 items-center justify-center rounded-full transition ${boostDisabled ? 'opacity-50 cursor-not-allowed' : ''} ${
+                            boostState === 'sent'
                               ? 'border border-amber-500/40 bg-amber-500/20 text-amber-200'
                               : 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-lg shadow-orange-500/20'
                           }`}
                           aria-label={`Boost ${item.name}`}
                         >
-                          {isBoosted || boostCooldown ? <Check className="h-4 w-4" /> : <Rocket className="h-4 w-4" />}
+                          {boostState === 'sent' ? <Check className="h-4 w-4" /> : <Rocket className="h-4 w-4" />}
                         </button>
 
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAction('message', item);
+                            handleMessage(item);
                           }}
                           className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
                             isMessaged || messageCooldown
@@ -566,6 +653,11 @@ export default function HomeFeed() {
                           {isMessaged || messageCooldown ? <Check className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
                         </button>
                       </div>
+                      {interactionFeedback[item.id] && (
+                        <p className={`text-[10px] leading-4 ${interactionFeedback[item.id].tone === 'error' ? 'text-rose-200' : 'text-white/60'}`} role="status" aria-live="polite">
+                          {interactionFeedback[item.id].message}
+                        </p>
+                      )}
                     </div>
                   </article>
                 );

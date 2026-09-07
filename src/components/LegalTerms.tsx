@@ -80,12 +80,12 @@ function PrivacyPolicyContent() {
         <h3 className="text-white/80 font-semibold text-sm">四、 資料保存與刪除（您的被遺忘權）(Data Deletion & Retention)</h3>
         <ul className="list-disc pl-4 space-y-1.5">
           <li>
-            <strong className="text-white/70">自主刪除：</strong>
-            您隨時可透過 App 內的「設定 ➔ 帳號安全 ➔ 刪除帳號」功能，自主且永久地刪除您的 GPulse 帳號。
+            <strong className="text-white/70">帳號刪除：</strong>
+            目前 App 尚未提供可安全執行帳號永久刪除的後端服務；登出不會刪除帳號或資料。
           </li>
           <li>
-            <strong className="text-white/70">實體銷毀：</strong>
-            當您執行「刪除帳號」後，您的個人檔案、照片、配對紀錄及定位足跡，將會從我們的伺服器中遭受不可逆之實體移除（Hard Delete）。
+            <strong className="text-white/70">刪除機制：</strong>
+            在可驗證的帳號刪除流程上線前，本服務不會將任何 App 內操作宣稱為已完成不可逆的資料刪除。
           </li>
           <li>
             <strong className="text-white/70">例外保留：</strong>

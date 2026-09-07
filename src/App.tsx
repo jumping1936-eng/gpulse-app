@@ -14,7 +14,12 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 // 核心業務邏輯元件 (確保被 AuthProvider 包覆)
 // ==========================================
 function AppContent() {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const {
+    user,
+    isLoading: isAuthLoading,
+    isPasswordRecovery,
+    completePasswordRecovery,
+  } = useAuth();
   const { simulateBlocked, setSimulateBlocked } = useApp();
 
   const [appState, setAppState] = useState<AppState>('safety-check');
@@ -48,6 +53,8 @@ function AppContent() {
 
     if (simulateBlocked) {
       setAppState('blocked');
+    } else if (isPasswordRecovery) {
+      setAppState('login');
     } else if (user) {
       // 🌟 神奇魔法：如果偵測到使用者已登入，直接跳轉到 MainApp，略過 Login 與 Legal
       setAppState('app'); 
@@ -55,7 +62,7 @@ function AppContent() {
       // 訪客或未登入，乖乖去登入畫面
       setAppState('login');
     }
-  }, [isChecking, isAuthLoading, user, simulateBlocked]);
+  }, [isChecking, isAuthLoading, user, simulateBlocked, isPasswordRecovery]);
 
   // 畫面 1：雙重 Loading 狀態 (地理檢查 or 驗證身份解析中)
   if (isChecking || isAuthLoading) {
@@ -78,13 +85,20 @@ function AppContent() {
       {appState === 'blocked' && (
         <SafetyGuard onSimulateReal={() => { setSimulateBlocked(false); }} />
       )}
-      {appState === 'login' && (
-        <LoginScreen onLogin={() => setAppState('legal')} />
+      {(appState === 'login' || isPasswordRecovery) && (
+        <LoginScreen
+          onLogin={() => setAppState('legal')}
+          isPasswordRecovery={isPasswordRecovery}
+          onPasswordRecoveryComplete={() => {
+            completePasswordRecovery();
+            setAppState(user ? 'app' : 'login');
+          }}
+        />
       )}
       {appState === 'legal' && (
         <LegalTerms onAccept={() => setAppState('app')} />
       )}
-      {appState === 'app' && (
+      {appState === 'app' && !isPasswordRecovery && (
         <MainApp />
       )}
     </>
