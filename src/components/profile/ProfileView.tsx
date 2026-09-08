@@ -12,6 +12,7 @@ import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 // ✅ 總監新增：匯入 Supabase 客戶端，準備執行徹底登出
 import { supabase } from '@/supabaseClient'; 
+import PrivateAlbumRelationships from '@/components/profile/PrivateAlbumRelationships';
 import { getPublicProfileGallery, getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 import {
   loadOwnerPrivatePhotos,
@@ -538,6 +539,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       <div className="bg-slate-950/95 backdrop-blur-xl border-b border-white/8 px-4 py-4 sticky top-0 z-10 flex items-center justify-between">
         <h1 className="text-white font-bold text-xl">個人檔案</h1>
       </div>
+      <PrivateAlbumRelationships />
 
       {/* 主畫面：相簿輪播 */}
       <div className="pt-5 pb-4 flex flex-col items-center gap-3">

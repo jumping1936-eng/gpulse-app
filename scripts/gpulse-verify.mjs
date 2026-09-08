@@ -78,7 +78,7 @@ checkZero(
   'public discovery protected-photo table references',
   countMatchesInFiles(
     (file) => /src[\\/]components[\\/](?:home|explore)[\\/]/.test(file),
-    /profile_private_photos|private_photos/g,
+    /from\(\s*['"]profile_private_photos['"]\s*\)|profiles\.private_photos/g,
   ),
 );
 checkZero('runtime fake profile image sources', countMatches(/(?:pravatar|randomuser|picsum|loremflickr)/gi));
@@ -86,6 +86,14 @@ checkZero('fabricated exact distance display', countMatches(/<\s*100m/gi));
 checkZero('direct like/boost notification inserts', countMatches(/from\(\s*['"]notifications['"]\s*\)\s*\.insert\(\s*\{[^}]*type:\s*['"](?:like|boost)['"]/gs));
 checkZero('direct frontend notification updates', countMatches(/from\(\s*['"]notifications['"]\s*\)\s*\.update\s*\(/gs));
 checkGreaterOrEqual('notification read RPC references', countMatches(/rpc\(\s*['"]mark_own_notifications_read['"]/g), 1);
+checkZero('direct frontend notification inserts', countMatches(/from\(\s*['"]notifications['"]\s*\)\s*\.insert\s*\(/gs));
+checkZero('direct private album table access', countMatches(/from\(\s*['"]private_album_access['"]\s*\)/g));
+checkGreaterOrEqual('private album request RPC references', countMatches(/rpc\(\s*['"]request_private_album['"]/g), 1);
+checkGreaterOrEqual('authorized private photo RPC references', countMatches(/rpc\(\s*['"]get_authorized_private_photos['"]/g), 1);
+checkGreaterOrEqual('private album status RPC references', countMatches(/rpc\(\s*['"]get_private_album_request_status['"]/g), 1);
+checkGreaterOrEqual('private album response RPC references', countMatches(/rpc\(\s*['"]respond_private_album_request['"]/g), 1);
+checkGreaterOrEqual('private album revoke RPC references', countMatches(/rpc\(\s*['"]revoke_private_album_access['"]/g), 1);
+checkGreaterOrEqual('private album owner list RPC references', countMatches(/rpc\(\s*['"]list_own_private_album_relationships['"]/g), 1);
 
 for (const check of checks) {
   console.log(`${check.result ? 'PASS' : 'FAIL'} ${check.name}: ${check.actual} ${check.operator} ${check.expected}`);

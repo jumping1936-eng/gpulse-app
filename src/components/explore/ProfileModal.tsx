@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Heart, MessageCircle, Lock, BadgeCheck, Crown, ShieldOff, MapPin, Ruler, Users, Search, Rocket } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
@@ -37,6 +37,10 @@ export default function ProfileModal({ user, onClose }: Props) {
   const [boostState, setBoostState] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
   const [interactionMessage, setInteractionMessage] = useState<string | null>(null);
   const [interactionMessageIsError, setInteractionMessageIsError] = useState(false);
+  const [albumStatus, setAlbumStatus] = useState<string | null>(null);
+  const [albumPhotos, setAlbumPhotos] = useState<string[]>([]);
+  const [albumLoading, setAlbumLoading] = useState(false);
+  const [albumMessage, setAlbumMessage] = useState<string | null>(null);
   const publicGallery = getPublicProfileGallery(user.public_photos, user.avatar_url);
   const primaryPhoto = publicGallery[0];
   const displayName = isValidProfileName(user.full_name ?? '') ? user.full_name : '';
@@ -58,6 +62,56 @@ export default function ProfileModal({ user, onClose }: Props) {
   const hasInteractionTarget = Boolean(targetId && currentUser?.id && targetId !== currentUser.id);
   const isBlocked = Boolean(targetId && blockedUsers.has(targetId));
   const interactionUnavailable = !hasInteractionTarget || isBlocked || blockListStatus !== 'ready';
+
+  useEffect(() => {
+    if (!targetId || !currentUser?.id || targetId === currentUser.id) return;
+    let current = true;
+    void supabase.rpc('get_private_album_request_status', { target_profile_id: targetId })
+      .then(({ data, error }) => {
+        if (!current) return;
+        if (error) {
+          setAlbumStatus(null);
+          setAlbumMessage('私密相簿目前無法使用。');
+          return;
+        }
+        setAlbumStatus(typeof data === 'string' ? data : null);
+      });
+    return () => { current = false; };
+  }, [currentUser?.id, targetId]);
+
+  async function handleAlbumRequest() {
+    if (!targetId || !currentUser?.id || targetId === currentUser.id || albumLoading) return;
+    setAlbumLoading(true);
+    setAlbumMessage(null);
+    try {
+      const { data, error } = await supabase.rpc('request_private_album', { target_profile_id: targetId });
+      if (error) throw error;
+      const nextStatus = typeof data === 'string' ? data : null;
+      setAlbumStatus(nextStatus);
+      setAlbumMessage(nextStatus === 'pending' ? '已送出相簿存取申請。' : nextStatus === 'approved' ? '你已獲准查看此相簿。' : '目前無法重新申請。');
+    } catch (error) {
+      console.error('私密相簿申請失敗:', error);
+      setAlbumMessage('私密相簿目前無法使用。');
+    } finally {
+      setAlbumLoading(false);
+    }
+  }
+
+  async function handleLoadAlbum() {
+    if (!targetId || !currentUser?.id || albumLoading) return;
+    setAlbumLoading(true);
+    setAlbumMessage(null);
+    try {
+      const { data, error } = await supabase.rpc('get_authorized_private_photos', { target_profile_id: targetId });
+      if (error) throw error;
+      setAlbumPhotos(Array.isArray(data) ? data.filter((photo): photo is string => typeof photo === 'string') : []);
+    } catch (error) {
+      console.error('載入私密相簿失敗:', error);
+      setAlbumMessage('私密相簿目前無法使用。');
+    } finally {
+      setAlbumLoading(false);
+    }
+  }
 
   async function handleBlock() {
     if (!user?.id || !currentUser?.id) return;
@@ -253,16 +307,18 @@ export default function ProfileModal({ user, onClose }: Props) {
               ))}
             </div>}
 
-            <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex items-center gap-3">
+            <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 space-y-3">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/30 to-amber-600/20 flex items-center justify-center">
                 <Lock className="w-5 h-5 text-amber-500"/>
               </div>
               <div className="flex-1">
                 <p className="text-white/80 text-sm font-semibold">私密相簿</p>
-                <p className="text-white/40 text-xs">存取申請功能尚未開放</p>
+                <p className="text-white/40 text-xs">{albumStatus === 'pending' ? '申請等待對方回覆' : albumStatus === 'approved' ? '已獲得存取權' : albumStatus === 'rejected' ? '目前無法存取' : '可向對方申請存取'}</p>
               </div>
-              <span className="text-amber-400/70 text-xs">暫不可用</span>
+              {albumStatus === 'approved' ? <button onClick={() => void handleLoadAlbum()} disabled={albumLoading} className="text-amber-300 text-xs disabled:opacity-50">查看</button> : <button onClick={() => void handleAlbumRequest()} disabled={albumLoading || !hasInteractionTarget} className="text-amber-300 text-xs disabled:opacity-50">{albumLoading ? '處理中' : '申請'}</button>}
             </div>
+            {albumMessage && <p className="text-xs text-amber-200" role="status">{albumMessage}</p>}
+            {albumPhotos.length > 0 && <div className="grid grid-cols-3 gap-2">{albumPhotos.map((photo) => <img key={photo} src={photo} alt="已授權私密照片" className="aspect-square w-full rounded-xl object-cover" />)}</div>}
           </div>
         </div>
 
