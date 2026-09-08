@@ -60,6 +60,12 @@ checkTrue('self-test: 0 === 0', 0 === 0);
 checkFalse('self-test: 1 === 0', 1 === 0);
 
 collectFiles(sourceRoot);
+const profileViewPath = path.join(sourceRoot, 'components', 'profile', 'ProfileView.tsx');
+const profileViewSource = fs.readFileSync(profileViewPath, 'utf8');
+const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
+  /useEffect\(\(\)\s*=>\s*\{([\s\S]*?)\},\s*\[[^\]]*\]\);/g,
+)].filter((match) => match[1].includes('navigator.geolocation.getCurrentPosition')).length;
+
 checkGreaterOrEqual('runtime source files scanned', files.length, 1);
 checkZero('legacy profiles.private_photos runtime references', countMatches(/profiles\.private_photos/g));
 checkZero('direct frontend conversation inserts', countMatches(/from\(\s*['"]conversations['"]\s*\)\s*\.insert\s*\(/gs));
@@ -83,6 +89,19 @@ checkZero(
 );
 checkZero('runtime fake profile image sources', countMatches(/(?:pravatar|randomuser|picsum|loremflickr)/gi));
 checkZero('fabricated exact distance display', countMatches(/<\s*100m/gi));
+checkZero('direct frontend protected-location table access', countMatches(/from\(\s*['"]profile_locations['"]\s*\)/g));
+checkZero('direct frontend protected-location table mutation', countMatches(/from\(\s*['"]profile_locations['"]\s*\)\s*\.(?:insert|update|upsert|delete)\s*\(/gs));
+checkZero('raw GPS local persistence', countMatches(/(?:localStorage|sessionStorage)\.(?:setItem|set)\s*\([^)]*(?:latitude|longitude|coords)/gis));
+checkZero('raw GPS writes to public profiles', countMatches(/from\(\s*['"]profiles['"]\s*\)\s*\.update\s*\(\s*\{[^}]*\b(?:latitude|longitude|lat|lng)\b/gs));
+checkZero('numeric derived distance fallbacks', countMatches(/\b(?:distance|distanceBucket)\s*(?:\?\?|\|\|)\s*['"]\d/gi));
+checkEqual('browser getCurrentPosition usage', countMatches(/navigator\.geolocation\.getCurrentPosition/g), 1);
+checkZero('browser watchPosition usage', countMatches(/navigator\.geolocation\.watchPosition/g));
+checkEqual('automatic geolocation effect paths', automaticGeolocationEffectCount, 0);
+checkGreaterOrEqual('explicit location update click controls', countMatches(/onClick=\{handleLocationUpdate\}/g), 1);
+checkGreaterOrEqual('set own location RPC references', countMatches(/rpc\(\s*['"]set_own_location['"]/g), 1);
+checkGreaterOrEqual('clear own location RPC references', countMatches(/rpc\(\s*['"]clear_own_location['"]/g), 1);
+checkGreaterOrEqual('own location status RPC references', countMatches(/rpc\(\s*['"]get_own_location_status['"]/g), 1);
+checkGreaterOrEqual('distance bucket RPC references', countMatches(/rpc\(\s*['"]get_profile_distance_buckets['"]/g), 1);
 checkZero('direct like/boost notification inserts', countMatches(/from\(\s*['"]notifications['"]\s*\)\s*\.insert\(\s*\{[^}]*type:\s*['"](?:like|boost)['"]/gs));
 checkZero('direct frontend notification updates', countMatches(/from\(\s*['"]notifications['"]\s*\)\s*\.update\s*\(/gs));
 checkGreaterOrEqual('notification read RPC references', countMatches(/rpc\(\s*['"]mark_own_notifications_read['"]/g), 1);

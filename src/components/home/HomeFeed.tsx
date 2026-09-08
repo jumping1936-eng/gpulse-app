@@ -6,6 +6,7 @@ import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
+import { DistanceBucket, useProfileDistanceBuckets } from '@/hooks/useProfileDistanceBuckets';
 
 interface ProfileRecord {
   id: string;
@@ -32,6 +33,7 @@ interface NearbyUser {
   isVIP: boolean;
   isOnline: boolean;
   accent: string;
+  distanceBucket?: DistanceBucket;
 }
 
 interface Recommendation {
@@ -43,6 +45,7 @@ interface Recommendation {
   bio: string;
   isVIP: boolean;
   isOnline: boolean;
+  distanceBucket?: DistanceBucket;
 }
 
 interface InteractionFeedback {
@@ -184,6 +187,9 @@ export default function HomeFeed() {
     return users.filter((profile) => !blockedUsers.has(profile.id));
   }, [blockListStatus, blockedUsers, users]);
 
+  const visibleProfileIds = useMemo(() => visibleUsers.map((profile) => profile.id), [visibleUsers]);
+  const distanceBucketsByProfileId = useProfileDistanceBuckets(visibleProfileIds);
+
   useEffect(() => {
     if (selectedProfile && !visibleUsers.some((profile) => profile.id === selectedProfile.id)) {
       setSelectedProfile(null);
@@ -202,8 +208,9 @@ export default function HomeFeed() {
       isVIP: user.is_vip,
       isOnline: user.status === 'online',
       accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][user.id.charCodeAt(0) % 5],
+      distanceBucket: distanceBucketsByProfileId[user.id],
     }));
-  }, [visibleUsers]);
+  }, [distanceBucketsByProfileId, visibleUsers]);
 
   const recommendations = useMemo<Recommendation[]>(() => {
     const source = visibleUsers;
@@ -218,9 +225,10 @@ export default function HomeFeed() {
         bio: user.bio,
         isVIP: user.is_vip,
         isOnline: user.status === 'online',
+        distanceBucket: distanceBucketsByProfileId[user.id],
       };
     });
-  }, [visibleUsers]);
+  }, [distanceBucketsByProfileId, visibleUsers]);
 
   const filteredRecommendations = useMemo(() => {
     const items = [...recommendations];
@@ -478,6 +486,10 @@ export default function HomeFeed() {
                       {user.location}
                     </span>
                   </div>}
+                  {user.distanceBucket && <div className="mt-1 flex items-center gap-1 text-[10px] text-violet-200">
+                    <MapPin className="h-3 w-3 text-violet-300" />
+                    {user.distanceBucket}
+                  </div>}
                 </button>
               ))}
             </div>
@@ -588,6 +600,10 @@ export default function HomeFeed() {
                           {item.location && <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">
                             <MapPin className="h-3 w-3 text-violet-300" />
                             {item.location}
+                          </div>}
+                          {item.distanceBucket && <div className="mt-1 flex items-center gap-1 text-[10px] text-violet-200">
+                            <MapPin className="h-3 w-3 text-violet-300" />
+                            {item.distanceBucket}
                           </div>}
                         </div>
                       </div>

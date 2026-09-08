@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom';
 import { X, Heart, MessageCircle, Lock, BadgeCheck, Crown, ShieldOff, MapPin, Ruler, Users, Search, Rocket } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/supabaseClient';
 import { getPublicProfileGallery, isValidProfileName } from '@/utils/profile';
 import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
+import { useProfileDistanceBuckets } from '@/hooks/useProfileDistanceBuckets';
 
 interface ProfileUser {
   id?: string;
@@ -62,6 +64,8 @@ export default function ProfileModal({ user, onClose }: Props) {
   const hasInteractionTarget = Boolean(targetId && currentUser?.id && targetId !== currentUser.id);
   const isBlocked = Boolean(targetId && blockedUsers.has(targetId));
   const interactionUnavailable = !hasInteractionTarget || isBlocked || blockListStatus !== 'ready';
+  const distanceBucketsByProfileId = useProfileDistanceBuckets(hasInteractionTarget && targetId ? [targetId] : []);
+  const distanceBucket = targetId ? distanceBucketsByProfileId[targetId] : undefined;
 
   useEffect(() => {
     if (!targetId || !currentUser?.id || targetId === currentUser.id) return;
@@ -282,6 +286,10 @@ export default function ProfileModal({ user, onClose }: Props) {
                 {location && <div className="mt-2 flex items-center gap-1 text-xs text-white/50">
                   <MapPin className="h-3 w-3 text-violet-300" />
                   <span>{location}</span>
+                </div>}
+                {distanceBucket && <div className="mt-1 flex items-center gap-1 text-xs text-violet-200">
+                  <MapPin className="h-3 w-3 text-violet-300" />
+                  <span>{distanceBucket}</span>
                 </div>}
               </div>
             </div>

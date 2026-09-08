@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import {
   BadgeCheck, Crown, Loader2, Scan, EyeOff,
   ChevronRight, Settings, LogOut, X, Heart,
@@ -38,6 +38,23 @@ const ToggleSwitch = ({ isOn, onToggle }: { isOn: boolean, onToggle: () => void 
 // ✅ 總監新增：定義 ProfileView 的 Props，接收來自 MainApp 的 onOpenBlockedUsers 事件
 interface ProfileViewProps {
   onOpenBlockedUsers?: () => void;
+}
+
+type OwnLocationStatus = 'loading' | 'not-enabled' | 'fresh' | 'stale' | 'error';
+
+type OwnLocationStatusRow = {
+  has_location: boolean;
+  updated_at: string | null;
+  is_fresh: boolean;
+};
+
+function isOwnLocationStatusRow(value: unknown): value is OwnLocationStatusRow {
+  if (typeof value !== 'object' || value === null) return false;
+
+  const row = value as Record<string, unknown>;
+  return typeof row.has_location === 'boolean'
+    && (typeof row.updated_at === 'string' || row.updated_at === null)
+    && typeof row.is_fresh === 'boolean';
 }
 
 export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
@@ -140,6 +157,9 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const [uploadTarget, setUploadTarget] = useState<'public' | 'private' | 'avatar'>('public');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [ownLocationStatus, setOwnLocationStatus] = useState<OwnLocationStatus>('loading');
+  const [locationAction, setLocationAction] = useState<'idle' | 'updating' | 'clearing'>('idle');
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
   const buildProfilePayload = (source = profile, avatarUrl = myAvatar) => ({
     full_name: source.name,
@@ -256,6 +276,109 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     const model = await load();
     setNsfwModel(model);
     return model;
+  };
+
+  const loadOwnLocationStatus = useCallback(async (): Promise<boolean> => {
+    if (!user?.id) {
+      setOwnLocationStatus('not-enabled');
+      return true;
+    }
+
+    setOwnLocationStatus('loading');
+    try {
+      const { data, error } = await supabase.rpc('get_own_location_status');
+      if (error) throw error;
+
+      const statusRow = Array.isArray(data) ? data[0] : null;
+      if (!isOwnLocationStatusRow(statusRow)) {
+        throw new Error('Location status response is invalid');
+      }
+
+      setOwnLocationStatus(!statusRow.has_location ? 'not-enabled' : statusRow.is_fresh ? 'fresh' : 'stale');
+      return true;
+    } catch (error) {
+      console.error('載入位置狀態失敗:', error);
+      setOwnLocationStatus('error');
+      return false;
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    void loadOwnLocationStatus();
+  }, [loadOwnLocationStatus]);
+
+  const persistBrowserLocation = async (latitude: number, longitude: number) => {
+    try {
+      const { error } = await supabase.rpc('set_own_location', {
+        latitude_input: latitude,
+        longitude_input: longitude,
+      });
+      if (error) throw error;
+
+      const reloaded = await loadOwnLocationStatus();
+      setLocationMessage(reloaded ? '位置已更新。' : '位置已更新，但目前無法重新確認狀態。');
+    } catch (error) {
+      console.error('更新位置失敗:', error);
+      setLocationMessage('無法更新位置，請稍後再試。');
+    } finally {
+      setLocationAction('idle');
+    }
+  };
+
+  const handleLocationUpdate = () => {
+    if (!user?.id) {
+      setLocationMessage('請先登入後再更新位置。');
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setLocationMessage('此瀏覽器不支援位置服務。');
+      return;
+    }
+
+    setLocationAction('updating');
+    setLocationMessage(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        void persistBrowserLocation(position.coords.latitude, position.coords.longitude);
+      },
+      (error) => {
+        const messageByCode: Record<number, string> = {
+          1: '位置權限遭拒絕。',
+          2: '目前無法取得位置。',
+          3: '取得位置逾時，請稍後再試。',
+        };
+        setLocationMessage(messageByCode[error.code] ?? '無法取得位置，請稍後再試。');
+        setLocationAction('idle');
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10_000,
+        maximumAge: 0,
+      },
+    );
+  };
+
+  const handleLocationClear = async () => {
+    if (!user?.id) {
+      setLocationMessage('請先登入後再清除位置。');
+      return;
+    }
+
+    setLocationAction('clearing');
+    setLocationMessage(null);
+    try {
+      const { error } = await supabase.rpc('clear_own_location');
+      if (error) throw error;
+
+      const reloaded = await loadOwnLocationStatus();
+      setLocationMessage(reloaded ? '位置已清除。' : '位置已清除，但目前無法重新確認狀態。');
+    } catch (error) {
+      console.error('清除位置失敗:', error);
+      setLocationMessage('無法清除位置，請稍後再試。');
+    } finally {
+      setLocationAction('idle');
+    }
   };
 
   const verifyImageSafe = async (dataUrl: string): Promise<boolean> => {
@@ -921,9 +1044,43 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5 flex items-center justify-between">
               <div>
                 <h4 className="text-white font-medium text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400" /> 隱藏精確距離</h4>
-                <p className="text-slate-400 text-xs mt-1">開啟後，別人將無法看到你目前的精確位置。</p>
+                <p className="text-slate-400 text-xs mt-1">開啟後，別人不會收到你的距離區間。</p>
               </div>
               <ToggleSwitch isOn={profile.hideDistance} onToggle={() => handleVipToggle(!profile.hideDistance)} />
+            </div>
+
+            <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h4 className="text-white font-medium text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-violet-300" /> 位置距離</h4>
+                  <p className="text-slate-400 text-xs mt-1">
+                    {ownLocationStatus === 'loading' && '正在確認已儲存的位置狀態。'}
+                    {ownLocationStatus === 'not-enabled' && '未啟用位置。'}
+                    {ownLocationStatus === 'fresh' && '已啟用位置，狀態有效。'}
+                    {ownLocationStatus === 'stale' && '已啟用位置，但位置已過期；請手動更新。'}
+                    {ownLocationStatus === 'error' && '目前無法確認位置狀態。'}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={handleLocationUpdate}
+                    disabled={locationAction !== 'idle'}
+                    className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {locationAction === 'updating' ? '更新中…' : ownLocationStatus === 'not-enabled' ? '啟用位置' : '更新位置'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleLocationClear()}
+                    disabled={locationAction !== 'idle' || ownLocationStatus === 'not-enabled'}
+                    className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {locationAction === 'clearing' ? '清除中…' : '清除位置'}
+                  </button>
+                </div>
+              </div>
+              {locationMessage && <p className="mt-3 text-xs text-slate-300" role="status" aria-live="polite">{locationMessage}</p>}
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5 flex items-center justify-between">
