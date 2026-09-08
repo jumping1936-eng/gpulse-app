@@ -84,6 +84,8 @@ checkZero(
 checkZero('runtime fake profile image sources', countMatches(/(?:pravatar|randomuser|picsum|loremflickr)/gi));
 checkZero('fabricated exact distance display', countMatches(/<\s*100m/gi));
 checkZero('direct like/boost notification inserts', countMatches(/from\(\s*['"]notifications['"]\s*\)\s*\.insert\(\s*\{[^}]*type:\s*['"](?:like|boost)['"]/gs));
+checkZero('direct frontend notification updates', countMatches(/from\(\s*['"]notifications['"]\s*\)\s*\.update\s*\(/gs));
+checkGreaterOrEqual('notification read RPC references', countMatches(/rpc\(\s*['"]mark_own_notifications_read['"]/g), 1);
 
 for (const check of checks) {
   console.log(`${check.result ? 'PASS' : 'FAIL'} ${check.name}: ${check.actual} ${check.operator} ${check.expected}`);

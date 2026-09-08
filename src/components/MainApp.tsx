@@ -14,6 +14,10 @@ import PaywallModal from '@/components/PaywallModal';
 import BlockedUsersList from '@/components/profile/BlockedUsersList';
 import { supabase } from '@/supabaseClient'; 
 
+type NotificationReadState = {
+  is_read: boolean | null;
+};
+
 export default function MainApp() {
   const { stealthMode, unreadChat, setUnreadChat, showPaywall, dismissPaywall, blockedUsers, blockListStatus } = useApp();
   const { user: currentUser } = useAuth(); 
@@ -21,6 +25,7 @@ export default function MainApp() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [activeChatConvo, setActiveChatConvo] = useState<Conversation | null>(null);
   const [showBlockedUsers, setShowBlockedUsers] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   // ✅ 總監重構：透過 RPC 取得真實房間 ID 後再進行跳轉
   useEffect(() => {
@@ -87,11 +92,54 @@ export default function MainApp() {
     if (activeTab === 'chat') setUnreadChat(0);
   }, [activeTab, setUnreadChat]);
 
+  useEffect(() => {
+    const userId = currentUser?.id;
+    let isCurrent = true;
+
+    if (!userId) {
+      setUnreadNotifications(0);
+      return () => { isCurrent = false; };
+    }
+
+    const fetchUnreadNotifications = async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('is_read')
+        .eq('receiver_id', userId);
+
+      if (error) {
+        console.error('🔴 無法載入未讀通知數量:', error);
+        return;
+      }
+
+      if (isCurrent) {
+        const notificationRows = (data ?? []) as NotificationReadState[];
+        setUnreadNotifications(notificationRows.filter((notification) => notification.is_read === false).length);
+      }
+    };
+
+    void fetchUnreadNotifications();
+
+    const channel = supabase
+      .channel(`notifications-badge:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `receiver_id=eq.${userId}` },
+        () => { void fetchUnreadNotifications(); },
+      )
+      .subscribe();
+
+    return () => {
+      isCurrent = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id]);
+
   const tabs = [
     { id: 'home' as Tab, icon: Home, label: '首頁' },
     { id: 'explore' as Tab, icon: Compass, label: '探索' },
     { id: 'chat' as Tab, icon: MessageCircle, label: '聊天', badge: unreadChat },
-    { id: 'inbox' as Tab, icon: Bell, label: '通知' },
+    { id: 'inbox' as Tab, icon: Bell, label: '通知', badge: unreadNotifications },
     { id: 'profile' as Tab, icon: User, label: '個人' },
   ];
 
@@ -115,7 +163,7 @@ export default function MainApp() {
           setActiveChatConvo(convo);
         }} />}
         {activeTab === 'chat' && activeChatConvo && <ChatRoom convo={activeChatConvo} onBack={() => setActiveChatConvo(null)} />}
-        {activeTab === 'inbox' && <NotificationsTab />}
+        {activeTab === 'inbox' && <NotificationsTab onUnreadCountChange={setUnreadNotifications} />}
         {activeTab === 'profile' && <ProfileView onOpenBlockedUsers={() => setShowBlockedUsers(true)} />}
       </div>
 

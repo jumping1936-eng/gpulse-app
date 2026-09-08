@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Mail, UserPlus, Lock, Loader2, Inbox, Sparkles } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
@@ -15,19 +15,27 @@ type NotificationRecord = {
   id: string;
   type: string;
   created_at: string;
+  is_read: boolean | null;
   sender?: NotificationSender;
 };
 
-export default function NotificationsTab() {
+type NotificationsTabProps = {
+  onUnreadCountChange: (count: number) => void;
+};
+
+export default function NotificationsTab({ onUnreadCountChange }: NotificationsTabProps) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'interaction' | 'system'>('interaction');
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+  const markingReadRef = useRef(false);
 
   const fetchNotifications = React.useCallback(async () => {
     if (!user?.id) {
       setNotifications([]);
+      setReadError(null);
       setIsLoading(false);
       return;
     }
@@ -36,7 +44,7 @@ export default function NotificationsTab() {
     try {
       const { data, error } = await supabase
         .from('notifications')
-        .select(`id, type, created_at, sender:sender_id (id, full_name, avatar_url, public_photos)`)
+        .select(`id, type, created_at, is_read, sender:sender_id (id, full_name, avatar_url, public_photos)`)
         .eq('receiver_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -44,6 +52,7 @@ export default function NotificationsTab() {
 
       setNotifications((data ?? []) as NotificationRecord[]);
       setErrorMessage(null);
+      setReadError(null);
     } catch (err) {
       console.error('🔴 獲取通知失敗:', err);
       setNotifications([]);
@@ -56,6 +65,44 @@ export default function NotificationsTab() {
   useEffect(() => {
     void fetchNotifications();
   }, [fetchNotifications]);
+
+  useEffect(() => {
+    onUnreadCountChange(notifications.filter((notification) => notification.is_read === false).length);
+  }, [notifications, onUnreadCountChange]);
+
+  useEffect(() => {
+    const unreadIds = notifications
+      .filter((notification) => notification.is_read === false)
+      .map((notification) => notification.id);
+
+    if (!user?.id || unreadIds.length === 0 || markingReadRef.current) return;
+
+    const markLoadedNotificationsRead = async () => {
+      markingReadRef.current = true;
+      try {
+        const { error } = await supabase.rpc('mark_own_notifications_read', {
+          notification_ids: unreadIds,
+        });
+
+        if (error) throw error;
+
+        const readIdSet = new Set(unreadIds);
+        setNotifications((currentNotifications) => currentNotifications.map((notification) => (
+          readIdSet.has(notification.id) && notification.is_read === false
+            ? { ...notification, is_read: true }
+            : notification
+        )));
+        setReadError(null);
+      } catch (err) {
+        console.error('🔴 無法將通知標示為已讀:', err);
+        setReadError('無法將通知標示為已讀，請稍後再試。');
+      } finally {
+        markingReadRef.current = false;
+      }
+    };
+
+    void markLoadedNotificationsRead();
+  }, [notifications, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -116,6 +163,12 @@ export default function NotificationsTab() {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar relative px-4 pb-5">
+        {readError && (
+          <div className="mx-1 mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            <span>{readError}</span>
+            <button onClick={() => void fetchNotifications()} className="shrink-0 rounded-full border border-amber-300/40 px-2.5 py-1 text-[11px] text-amber-100">重試</button>
+          </div>
+        )}
         {activeTab === 'interaction' && (
           <div className="flex flex-col animate-in fade-in slide-in-from-left-4 duration-300">
             {isLoading ? (
