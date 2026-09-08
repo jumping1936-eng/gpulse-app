@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState, useEffect } from 'react';
 import {
   BadgeCheck, Crown, Loader2, Scan, EyeOff,
   ChevronRight, Settings, LogOut, X, Heart,
-  Check, Ruler, VenetianMask, Instagram, Facebook, Twitter, Send,
+  Check, Ruler, VenetianMask, Send,
   Download, Trash2, Lock, Image as ImageIcon, ShieldCheck,
   Ban, MessageCircle, Plus, User, Calendar, Scale, AlignLeft,
   Activity, UserX, MapPin, HelpCircle, MessageSquare, ShieldAlert,
@@ -13,7 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 // ✅ 總監新增：匯入 Supabase 客戶端，準備執行徹底登出
 import { supabase } from '@/supabaseClient'; 
 import PrivateAlbumRelationships from '@/components/profile/PrivateAlbumRelationships';
-import { getPublicProfileGallery, getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+import { getPublicProfileGallery, getPublicProfilePhoto, isValidProfileName, OWN_PROFILE_FIELDS } from '@/utils/profile';
 import {
   loadOwnerPrivatePhotos,
   persistOwnerPrivatePhotos,
@@ -41,6 +41,22 @@ interface ProfileViewProps {
 }
 
 type OwnLocationStatus = 'loading' | 'not-enabled' | 'fresh' | 'stale' | 'error';
+type OwnProfileLoadStatus = 'loading' | 'ready' | 'missing' | 'error' | 'unauthenticated';
+
+const createEmptyProfile = () => ({
+  name: '',
+  age: '',
+  location: '',
+  height: '',
+  weight: '',
+  role: [] as string[],
+  tribe: '',
+  bio: '',
+  lookingFor: [] as string[],
+  hideDistance: false,
+  publicPhotos: [] as string[],
+  privatePhotos: [] as string[],
+});
 
 type OwnLocationStatusRow = {
   has_location: boolean;
@@ -107,24 +123,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   // ==========================================
   // 核心領域模型 (Domain Models)
   // ==========================================
-  const [profile, setProfile] = useState({
-    name: '',
-    age: '',
-    location: '',
-    height: '',
-    weight: '',
-    role: [] as string[],
-    tribe: '',
-    bio: '',
-    lookingFor: [] as string[],
-    telegram: '',
-    twitter: '',
-    facebook: '',
-    instagram: '',
-    hideDistance: false,
-    publicPhotos: [] as string[],
-    privatePhotos: [] as string[],
-  });
+  const [profile, setProfile] = useState(createEmptyProfile);
 
 
   const LOOKING_FOR_OPTIONS = ['約會', '交友', '聊天', '打撲克', '不設限'];
@@ -158,6 +157,9 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [ownLocationStatus, setOwnLocationStatus] = useState<OwnLocationStatus>('loading');
+  const [ownProfileLoadStatus, setOwnProfileLoadStatus] = useState<OwnProfileLoadStatus>('loading');
+  const [ownProfileLoadError, setOwnProfileLoadError] = useState<string | null>(null);
+  const [profileReloadToken, setProfileReloadToken] = useState(0);
   const [locationAction, setLocationAction] = useState<'idle' | 'updating' | 'clearing'>('idle');
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
@@ -180,9 +182,17 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     if (!user?.id) return;
 
     const payload = buildProfilePayload(source, avatarUrl);
-    const { error } = await supabase.from('profiles').update(payload).eq('id', user.id);
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(payload)
+      .eq('id', user.id)
+      .select('id')
+      .maybeSingle();
     if (error) {
       throw error;
+    }
+    if (!data) {
+      throw new Error('找不到可更新的個人檔案。');
     }
 
     try {
@@ -206,20 +216,37 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     const currentRunId = ++loadProfileRunId.current;
 
     const loadProfileFromDb = async () => {
-      if (!user?.id) return;
+      if (!user?.id) {
+        if (isMounted) {
+          const emptyProfile = createEmptyProfile();
+          setProfile(emptyProfile);
+          setEditForm(emptyProfile);
+          setMyAvatar(null);
+          setOwnProfileLoadStatus('unauthenticated');
+          setOwnProfileLoadError(null);
+        }
+        return;
+      }
+
+      setOwnProfileLoadStatus('loading');
+      setOwnProfileLoadError(null);
 
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, full_name, age, location, height, weight, role, tribe, bio, looking_for, telegram, twitter, facebook, instagram, hide_distance, avatar_url, public_photos')
+          .select(OWN_PROFILE_FIELDS)
           .eq('id', user.id)
           .maybeSingle();
         if (error) throw error;
-        if (!data || !isMounted) return;
-        if (currentRunId !== loadProfileRunId.current) return;
-
-        const privatePhotos = await loadOwnerPrivatePhotos(user.id);
         if (!isMounted || currentRunId !== loadProfileRunId.current) return;
+        if (!data) {
+          const emptyProfile = createEmptyProfile();
+          setProfile(emptyProfile);
+          setEditForm(emptyProfile);
+          setMyAvatar(null);
+          setOwnProfileLoadStatus('missing');
+          return;
+        }
 
         const nextProfile = {
           name: typeof data.full_name === 'string' ? data.full_name : '',
@@ -231,21 +258,33 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
           tribe: typeof data.tribe === 'string' ? data.tribe : '',
           bio: typeof data.bio === 'string' ? data.bio : '',
           lookingFor: Array.isArray(data.looking_for) ? data.looking_for : (typeof data.looking_for === 'string' ? data.looking_for.split(',').map((item: string) => item.trim()).filter(Boolean) : []),
-          telegram: data.telegram ?? '',
-          twitter: data.twitter ?? '',
-          facebook: data.facebook ?? '',
-          instagram: data.instagram ?? '',
           hideDistance: Boolean(data.hide_distance ?? false),
           publicPhotos: Array.isArray(data.public_photos) ? data.public_photos : [],
-          privatePhotos,
+          privatePhotos: [],
         };
 
         setProfile(nextProfile);
         setEditForm(nextProfile);
         setMyAvatar(getPublicProfilePhoto(data.public_photos, data.avatar_url) ?? null);
+        setOwnProfileLoadStatus('ready');
+
+        try {
+          const privatePhotos = await loadOwnerPrivatePhotos(user.id);
+          if (!isMounted || currentRunId !== loadProfileRunId.current) return;
+          setProfile((current) => ({ ...current, privatePhotos }));
+          setEditForm((current) => ({ ...current, privatePhotos }));
+        } catch (privatePhotoError) {
+          console.error('載入私密相簿失敗:', privatePhotoError);
+        }
       } catch (error) {
         if (isMounted) {
           console.error('載入個人檔案失敗:', error);
+          const emptyProfile = createEmptyProfile();
+          setProfile(emptyProfile);
+          setEditForm(emptyProfile);
+          setMyAvatar(null);
+          setOwnProfileLoadStatus('error');
+          setOwnProfileLoadError('目前無法載入個人檔案，請稍後再試。');
         }
       }
     };
@@ -255,8 +294,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     return () => {
       isMounted = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, profileReloadToken, setMyAvatar]);
 
   // ==========================================
   // 業務邏輯：檔案轉換與 AI 審核
@@ -505,7 +543,18 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   // ✅ 總監升級：將函數改為 async 以支援後端非同步登出
   async function handleMenuClick(action: string) {
     switch (action) {
-      case '編輯檔案': setEditForm(profile); setIsEditModalOpen(true); break;
+      case '編輯檔案':
+        if (ownProfileLoadStatus !== 'ready') {
+          alert(
+            ownProfileLoadStatus === 'missing'
+              ? '尚未建立個人檔案，目前無法安全儲存設定。'
+              : '個人檔案尚未可用，請先完成載入後再試。',
+          );
+          break;
+        }
+        setEditForm(profile);
+        setIsEditModalOpen(true);
+        break;
       case '通知設定': setIsNotificationModalOpen(true); break;
       case '隱私設定': setIsPrivacyModalOpen(true); break;
       // ✅ 總監新增：呼叫上層 (MainApp) 傳進來的封鎖名單開啟函式
@@ -610,20 +659,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     setReportAttachment(null);
   };
 
-  const getSocialLink = (platform: string, handle: string) => {
-    if (!handle) return '#';
-    handle = handle.trim();
-    if (handle.startsWith('http://') || handle.startsWith('https://')) return handle;
-    const cleanHandle = handle.replace('@', '');
-    switch(platform) {
-      case 'telegram': return `https://t.me/${cleanHandle}`;
-      case 'twitter': return `https://x.com/${cleanHandle}`;
-      case 'facebook': return `https://facebook.com/${cleanHandle}`;
-      case 'instagram': return `https://instagram.com/${cleanHandle}`;
-      default: return '#';
-    }
-  };
-
   const handleVipToggle = async (nextValue: boolean) => {
     if (!hasVipAccess) {
       requestVipFeature();
@@ -662,6 +697,28 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       <div className="bg-slate-950/95 backdrop-blur-xl border-b border-white/8 px-4 py-4 sticky top-0 z-10 flex items-center justify-between">
         <h1 className="text-white font-bold text-xl">個人檔案</h1>
       </div>
+      {ownProfileLoadStatus === 'loading' && (
+        <div className="mx-4 mt-4 flex items-center justify-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 text-xs text-violet-100" role="status">
+          <Loader2 className="h-4 w-4 animate-spin" /> 正在載入個人檔案…
+        </div>
+      )}
+      {ownProfileLoadStatus === 'error' && (
+        <div className="mx-4 mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-center text-xs text-rose-100" role="alert">
+          <p>{ownProfileLoadError ?? '目前無法載入個人檔案，請稍後再試。'}</p>
+          <button
+            type="button"
+            onClick={() => setProfileReloadToken((current) => current + 1)}
+            className="mt-2 rounded-lg border border-rose-300/30 px-3 py-1.5 font-semibold text-rose-100 transition hover:bg-rose-500/10"
+          >
+            重試
+          </button>
+        </div>
+      )}
+      {ownProfileLoadStatus === 'missing' && (
+        <div className="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs text-amber-100" role="status">
+          尚未建立個人檔案。系統尚未找到可安全編輯的個人檔案資料。
+        </div>
+      )}
       <PrivateAlbumRelationships />
 
       {/* 主畫面：相簿輪播 */}
@@ -736,12 +793,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               )}
             </div>
 
-            <div className="mt-5 flex items-center justify-center gap-5">
-              {profile.instagram && <a href={getSocialLink('instagram', profile.instagram)} target="_blank" rel="noopener noreferrer" className="hover:scale-110 transition-transform"><Instagram className="w-6 h-6 text-pink-500" /></a>}
-              {profile.facebook && <a href={getSocialLink('facebook', profile.facebook)} target="_blank" rel="noopener noreferrer" className="hover:scale-110 transition-transform"><Facebook className="w-6 h-6 text-blue-500" /></a>}
-              {profile.twitter && <a href={getSocialLink('twitter', profile.twitter)} target="_blank" rel="noopener noreferrer" className="hover:scale-110 transition-transform"><Twitter className="w-6 h-6 text-sky-400" /></a>}
-              {profile.telegram && <a href={getSocialLink('telegram', profile.telegram)} target="_blank" rel="noopener noreferrer" className="hover:scale-110 transition-transform"><Send className="w-6 h-6 text-blue-400" /></a>}
-            </div>
           </div>
         </div>
       </div>
@@ -941,24 +992,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               </div>
             </div>
 
-            <div className="bg-slate-950 border border-white/5 rounded-2xl p-4 space-y-4">
-              <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Activity className="w-3.5 h-3.5" />社群連結串接</label>
-              <div className="relative">
-                <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-pink-500" />
-                <input type="text" value={editForm.instagram} onChange={(e) => setEditForm({...editForm, instagram: e.target.value})} placeholder="Instagram 帳號或網址" className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white focus:border-pink-500 outline-none" />
-              </div>
-              <div className="relative">
-                <Facebook className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500" />
-                <input type="text" value={editForm.facebook} onChange={(e) => setEditForm({...editForm, facebook: e.target.value})} placeholder="Facebook 帳號或網址" className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white focus:border-blue-500 outline-none" />
-              </div>
-              <div className="relative">
-                <Twitter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sky-400" />
-                <input type="text" value={editForm.twitter} onChange={(e) => setEditForm({...editForm, twitter: e.target.value})} placeholder="X (Twitter) 帳號或網址" className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white focus:border-sky-400 outline-none" />
-              </div>
-              <div className="relative">
-                <Send className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
-                <input type="text" value={editForm.telegram} onChange={(e) => setEditForm({...editForm, telegram: e.target.value})} placeholder="Telegram ID 或網址" className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white focus:border-blue-400 outline-none" />
-              </div>
+            <div className="rounded-2xl border border-white/5 bg-slate-950 p-4">
+              <p className="text-xs text-slate-400">社群連結尚未有可用的個人檔案資料契約，因此目前不提供儲存欄位。</p>
             </div>
           </div>
         </div>

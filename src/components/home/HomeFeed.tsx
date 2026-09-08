@@ -4,7 +4,7 @@ import { supabase } from '@/supabaseClient';
 import ProfileModal from '@/components/explore/ProfileModal';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+import { getPublicProfilePhoto, isValidProfileName, PUBLIC_PROFILE_FIELDS } from '@/utils/profile';
 import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
 import { DistanceBucket, useProfileDistanceBuckets } from '@/hooks/useProfileDistanceBuckets';
 
@@ -16,7 +16,6 @@ interface ProfileRecord {
   public_photos: string[];
   location: string;
   is_vip: boolean;
-  status: string;
   bio: string;
   tribe?: string;
   height?: number;
@@ -74,10 +73,6 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
     const bio = typeof raw.bio === 'string' && raw.bio.trim().length > 0
       ? raw.bio
       : '';
-    const status = typeof raw.status === 'string'
-      ? raw.status.toLowerCase()
-      : '';
-
     const tribe = typeof raw.tribe === 'string' ? raw.tribe : undefined;
 
     const rawHeight = Number(raw.height);
@@ -105,7 +100,6 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
       public_photos: publicPhotos,
       location,
       is_vip: raw.is_vip === true,
-      status,
       bio,
       tribe,
       height,
@@ -148,7 +142,7 @@ export default function HomeFeed() {
 
         const { data, error: supabaseError } = await supabase
           .from('profiles')
-          .select('id, full_name, age, avatar_url, public_photos, location, is_vip, status, bio, tribe, height, role, looking_for');
+          .select(PUBLIC_PROFILE_FIELDS);
 
         if (supabaseError) {
           throw supabaseError;
@@ -206,7 +200,7 @@ export default function HomeFeed() {
       avatar: getPublicProfilePhoto(user.public_photos, user.avatar_url) ?? '',
       location: user.location,
       isVIP: user.is_vip,
-      isOnline: user.status === 'online',
+      isOnline: false,
       accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][user.id.charCodeAt(0) % 5],
       distanceBucket: distanceBucketsByProfileId[user.id],
     }));
@@ -224,7 +218,7 @@ export default function HomeFeed() {
         location: user.location,
         bio: user.bio,
         isVIP: user.is_vip,
-        isOnline: user.status === 'online',
+        isOnline: false,
         distanceBucket: distanceBucketsByProfileId[user.id],
       };
     });
@@ -343,8 +337,6 @@ export default function HomeFeed() {
       avatar_url: item.avatar,
       age: item.age,
       bio: item.bio,
-      city: item.city,
-      status: 'online',
       other_user: {
         id: item.id,
         full_name: item.name,
@@ -686,7 +678,6 @@ export default function HomeFeed() {
             age: selectedProfile.age,
             isVIP: selectedProfile.is_vip,
             isVerified: selectedProfile.is_vip,
-            status: selectedProfile.status || undefined,
             bio: selectedProfile.bio,
             tribe: selectedProfile.tribe,
             height: selectedProfile.height ? `${selectedProfile.height}` : undefined,

@@ -3,6 +3,40 @@ export const isValidProfileName = (value: string): boolean => {
   return /^[\p{Script=Han}]{1,7}$/u.test(name) || /^[A-Za-z]{1,14}$/.test(name);
 };
 
+// Production-verified public.profiles columns used by public profile cards.
+// Sharing this contract prevents a stale column on one surface from turning
+// real profile data into a misleading empty state.
+export const PUBLIC_PROFILE_FIELDS = [
+  'id',
+  'full_name',
+  'age',
+  'avatar_url',
+  'public_photos',
+  'location',
+  'is_vip',
+  'bio',
+  'tribe',
+  'height',
+  'role',
+  'looking_for',
+].join(', ');
+
+export const OWN_PROFILE_FIELDS = [
+  'id',
+  'full_name',
+  'age',
+  'location',
+  'height',
+  'weight',
+  'role',
+  'tribe',
+  'bio',
+  'looking_for',
+  'hide_distance',
+  'avatar_url',
+  'public_photos',
+].join(', ');
+
 export const getPublicProfilePhoto = (
   publicPhotos?: readonly unknown[],
   avatarUrl?: unknown,

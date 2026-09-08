@@ -91,11 +91,21 @@ const storiesMigrationSource = storiesMigrationExists
   : '';
 const profileViewPath = path.join(sourceRoot, 'components', 'profile', 'ProfileView.tsx');
 const profileViewSource = fs.readFileSync(profileViewPath, 'utf8');
+const profileUtilitySource = fs.readFileSync(path.join(sourceRoot, 'utils', 'profile.ts'), 'utf8');
+const homeFeedSource = fs.readFileSync(path.join(sourceRoot, 'components', 'home', 'HomeFeed.tsx'), 'utf8');
+const exploreTabSource = fs.readFileSync(path.join(sourceRoot, 'components', 'explore', 'ExploreTab.tsx'), 'utf8');
 const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
   /useEffect\(\(\)\s*=>\s*\{([\s\S]*?)\},\s*\[[^\]]*\]\);/g,
 )].filter((match) => match[1].includes('navigator.geolocation.getCurrentPosition')).length;
 
 checkGreaterOrEqual('runtime source files scanned', files.length, 1);
+checkTrue('public profile field contract exists', profileUtilitySource.includes('PUBLIC_PROFILE_FIELDS'));
+checkTrue('own profile field contract exists', profileUtilitySource.includes('OWN_PROFILE_FIELDS'));
+checkTrue('Home uses verified public profile contract', homeFeedSource.includes('.select(PUBLIC_PROFILE_FIELDS)'));
+checkTrue('Explore uses verified public profile contract', exploreTabSource.includes('.select(PUBLIC_PROFILE_FIELDS)'));
+checkTrue('Profile uses verified own profile contract', profileViewSource.includes('.select(OWN_PROFILE_FIELDS)'));
+checkFalse('profile field contracts exclude unavailable columns', /['"](?:status|telegram|twitter|facebook|instagram)['"]/.test(profileUtilitySource));
+checkTrue('own profile distinguishes loading, missing, and error', /OwnProfileLoadStatus = 'loading' \| 'ready' \| 'missing' \| 'error'/.test(profileViewSource));
 checkTrue('secure Stories migration exists', storiesMigrationExists);
 checkGreaterOrEqual('Stories table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.stories/g)].length, 1);
 checkGreaterOrEqual('Story view table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.story_views/g)].length, 1);

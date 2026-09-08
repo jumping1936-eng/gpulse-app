@@ -9,7 +9,7 @@ import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
 import { ArrowUpRight, Crown, MapPin, Compass } from 'lucide-react';
-import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+import { getPublicProfilePhoto, isValidProfileName, PUBLIC_PROFILE_FIELDS } from '@/utils/profile';
 import { DistanceBucket, useProfileDistanceBuckets } from '@/hooks/useProfileDistanceBuckets';
 import type {
   OwnActiveStory,
@@ -26,7 +26,6 @@ interface ProfileRecord {
   public_photos: string[];
   location: string;
   is_vip: boolean;
-  status: string;
   bio: string;
   tribe?: string;
   height?: number;
@@ -119,8 +118,6 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
     const bio = typeof raw.bio === 'string' && raw.bio.trim().length > 0
       ? raw.bio
       : '';
-    const status = typeof raw.status === 'string' ? raw.status.toLowerCase() : '';
-
     const tribe = typeof raw.tribe === 'string' ? raw.tribe : undefined;
 
     const rawHeight = Number(raw.height);
@@ -148,7 +145,6 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
       public_photos: publicPhotos,
       location,
       is_vip: raw.is_vip === true,
-      status,
       bio,
       tribe,
       height,
@@ -167,6 +163,7 @@ export default function ExploreTab() {
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
   const [myProfile, setMyProfile] = useState<ProfileRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [profileFetchError, setProfileFetchError] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'vip'>('all');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<ProfileRecord | null>(null);
@@ -184,7 +181,7 @@ export default function ExploreTab() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, age, avatar_url, public_photos, location, is_vip, status, bio, tribe, height, role, looking_for');
+        .select(PUBLIC_PROFILE_FIELDS);
 
       if (error) throw error;
 
@@ -194,10 +191,12 @@ export default function ExploreTab() {
 
       setProfiles(otherProfiles);
       setMyProfile(mine);
+      setProfileFetchError(null);
     } catch (error) {
       console.error('🔴 獲取真實名片失敗:', error);
       setProfiles([]);
       setMyProfile(null);
+      setProfileFetchError('目前無法載入使用者資料，請稍後再試。');
     } finally {
       setIsLoading(false);
     }
@@ -324,6 +323,7 @@ export default function ExploreTab() {
     } else {
       setProfiles([]);
       setMyProfile(null);
+      setProfileFetchError(null);
       setIsLoading(false);
     }
   }, [authUser, fetchRealProfiles]);
@@ -373,7 +373,7 @@ export default function ExploreTab() {
     const loadMissingStoryProfiles = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, age, avatar_url, public_photos, location, is_vip, status, bio, tribe, height, role, looking_for')
+        .select(PUBLIC_PROFILE_FIELDS)
         .in('id', [...new Set(missingProfileIds)]);
 
       if (!active) return;
@@ -412,7 +412,7 @@ export default function ExploreTab() {
       photo_url: getPublicProfilePhoto(user.public_photos, user.avatar_url),
       location: user.location,
       isVIP: user.is_vip,
-      isOnline: user.status === 'online',
+      isOnline: false,
       accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][user.id.charCodeAt(0) % 5],
       distanceBucket: distanceBucketsByProfileId[user.id],
     }));
@@ -428,7 +428,7 @@ export default function ExploreTab() {
         location: user.location,
         bio: user.bio,
         isVIP: user.is_vip,
-        isOnline: user.status === 'online',
+        isOnline: false,
         distanceBucket: distanceBucketsByProfileId[user.id],
       };
     });
@@ -457,6 +457,11 @@ export default function ExploreTab() {
   return (
     <div className="relative h-full overflow-y-auto bg-slate-950 pb-28">
       <section className="px-4 pt-5">
+        {!isLoading && profileFetchError && (
+          <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-center text-xs text-rose-200" role="alert">
+            {profileFetchError}
+          </div>
+        )}
         {!isLoading && blockListStatus !== 'ready' && (
           <div className={`mb-4 rounded-xl border p-3 text-center text-xs ${
             blockListStatus === 'loading'
@@ -491,7 +496,7 @@ export default function ExploreTab() {
               </div>
             ))}
           </div>
-        ) : nearbyUsers.length === 0 ? (
+        ) : profileFetchError ? null : nearbyUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/30">
             <Compass className="w-8 h-8" />
             <p className="text-xs">暫時沒有其他使用者</p>
@@ -595,7 +600,7 @@ export default function ExploreTab() {
               </div>
             ))}
           </div>
-        ) : filteredRecommendations.length === 0 ? (
+        ) : profileFetchError ? null : filteredRecommendations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/30">
             <Crown className="w-8 h-8" />
             <p className="text-xs">目前還沒有推薦使用者</p>
