@@ -10,7 +10,7 @@ import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteracti
 interface ProfileRecord {
   id: string;
   full_name: string;
-  age: number;
+  age: number | null;
   avatar_url: string;
   public_photos: string[];
   location: string;
@@ -26,9 +26,9 @@ interface ProfileRecord {
 interface NearbyUser {
   id: string;
   name: string;
-  age: number;
+  age: number | null;
   avatar: string;
-  city: string;
+  location: string;
   isVIP: boolean;
   isOnline: boolean;
   accent: string;
@@ -37,11 +37,12 @@ interface NearbyUser {
 interface Recommendation {
   id: string;
   name: string;
-  age: number;
+  age: number | null;
   avatar: string;
-  city: string;
+  location: string;
   bio: string;
   isVIP: boolean;
+  isOnline: boolean;
 }
 
 interface InteractionFeedback {
@@ -52,31 +53,21 @@ interface InteractionFeedback {
 
 const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecord>): ProfileRecord[] => {
   const safeRecords = Array.isArray(records) ? records : [];
-  return safeRecords.map((profile, index) => {
+  return safeRecords.flatMap((profile) => {
     const raw = profile as Record<string, unknown>;
+    const id = typeof raw.id === 'string' && raw.id.trim().length > 0 ? raw.id : null;
+    if (!id) return [];
 
-    const rawProfileName = typeof raw.full_name === 'string'
-      ? raw.full_name
-      : typeof raw.name === 'string'
-        ? raw.name
-        : '';
+    const rawProfileName = typeof raw.full_name === 'string' ? raw.full_name : '';
     const profileName = isValidProfileName(rawProfileName) ? rawProfileName : '';
 
     const rawAge = Number(raw.age);
-    const age = Number.isFinite(rawAge) ? rawAge : 0;
-    const avatar = typeof raw.avatar_url === 'string'
-      ? raw.avatar_url
-      : typeof raw.avatar === 'string'
-        ? raw.avatar
-        : '';
+    const age = Number.isFinite(rawAge) && rawAge > 0 ? rawAge : null;
+    const avatar = typeof raw.avatar_url === 'string' ? raw.avatar_url : '';
     const publicPhotos = Array.isArray(raw.public_photos)
       ? raw.public_photos.filter((item): item is string => typeof item === 'string')
       : [];
-    const location = typeof raw.location === 'string'
-      ? raw.location
-      : typeof raw.city === 'string'
-        ? raw.city
-        : '';
+    const location = typeof raw.location === 'string' ? raw.location.trim() : '';
     const bio = typeof raw.bio === 'string' && raw.bio.trim().length > 0
       ? raw.bio
       : '';
@@ -104,13 +95,13 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
     }
 
     return {
-      id: String(raw.id ?? `home-${index}`),
+      id,
       full_name: profileName,
       age,
       avatar_url: avatar,
       public_photos: publicPhotos,
       location,
-      is_vip: Boolean(raw.is_vip ?? raw.isVIP ?? false),
+      is_vip: raw.is_vip === true,
       status,
       bio,
       tribe,
@@ -207,7 +198,7 @@ export default function HomeFeed() {
       name: user.full_name,
       age: user.age,
       avatar: getPublicProfilePhoto(user.public_photos, user.avatar_url) ?? '',
-      city: user.location,
+      location: user.location,
       isVIP: user.is_vip,
       isOnline: user.status === 'online',
       accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][user.id.charCodeAt(0) % 5],
@@ -223,9 +214,10 @@ export default function HomeFeed() {
         name: user.full_name,
         age: user.age,
         avatar: getPublicProfilePhoto(user.public_photos, user.avatar_url) ?? '',
-        city: user.location,
+        location: user.location,
         bio: user.bio,
         isVIP: user.is_vip,
+        isOnline: user.status === 'online',
       };
     });
   }, [visibleUsers]);
@@ -417,8 +409,8 @@ export default function HomeFeed() {
         <section className="mb-6">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Nearby</p>
-              <h2 className="text-lg font-bold text-white">附近活躍使用者</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Discover</p>
+            <h2 className="text-lg font-bold text-white">探索使用者</h2>
             </div>
             <button
               type="button"
@@ -469,23 +461,23 @@ export default function HomeFeed() {
                       )}
                       <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                         <div>
-                          <p className="text-base font-bold leading-none text-white">{user.name}</p>
-                          <p className="mt-1 text-[10px] text-white/80">{user.age}</p>
+                          <p className="text-base font-bold leading-none text-white">{isValidProfileName(user.name) ? user.name : '尚未設定名稱'}</p>
+                          {user.age && <p className="mt-1 text-[10px] text-white/80">{user.age}</p>}
                         </div>
-                        <div className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-slate-950/60 px-1.5 py-1 text-[9px] text-emerald-300 backdrop-blur-xl">
+                        {user.isOnline && <div className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-slate-950/60 px-1.5 py-1 text-[9px] text-emerald-300 backdrop-blur-xl">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                          {user.isOnline ? 'online' : 'away'}
-                        </div>
+                          online
+                        </div>}
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-2 flex items-center justify-between text-[10px] text-slate-300">
+                  {user.location && <div className="mt-2 flex items-center justify-between text-[10px] text-slate-300">
                     <span className="flex items-center gap-1">
                       <MapPin className="h-3 w-3 text-violet-300" />
-                      {user.city}
+                      {user.location}
                     </span>
-                  </div>
+                  </div>}
                 </button>
               ))}
             </div>
@@ -583,24 +575,24 @@ export default function HomeFeed() {
                           VIP
                         </div>
                       )}
-                      <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title="online" />
+                      {item.isOnline && <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title="online" />}
                     </div>
 
                     <div className="space-y-3 p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <h3 className="text-base font-bold text-white">{item.name}, {item.age}</h3>
+                            <h3 className="text-base font-bold text-white">{isValidProfileName(item.name) ? item.name : '尚未設定名稱'}{item.age ? `, ${item.age}` : ''}</h3>
                             {item.isVIP && <Crown className="h-3.5 w-3.5 text-amber-400" />}
                           </div>
-                          <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">
+                          {item.location && <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">
                             <MapPin className="h-3 w-3 text-violet-300" />
-                            {item.city}
-                          </div>
+                            {item.location}
+                          </div>}
                         </div>
                       </div>
 
-                      <p className="text-[11px] leading-5 text-slate-300">{item.bio}</p>
+                      {item.bio && <p className="text-[11px] leading-5 text-slate-300">{item.bio}</p>}
 
                       <div className="flex items-center gap-2 pt-1">
                         <button
@@ -674,10 +666,11 @@ export default function HomeFeed() {
             full_name: selectedProfile.full_name,
             avatar_url: selectedProfile.avatar_url,
             public_photos: selectedProfile.public_photos,
+            location: selectedProfile.location || undefined,
             age: selectedProfile.age,
             isVIP: selectedProfile.is_vip,
             isVerified: selectedProfile.is_vip,
-            status: selectedProfile.status === 'online' ? 'online' : 'offline',
+            status: selectedProfile.status || undefined,
             bio: selectedProfile.bio,
             tribe: selectedProfile.tribe,
             height: selectedProfile.height ? `${selectedProfile.height}` : undefined,

@@ -2,18 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { Heart, Mail, UserPlus, Lock, Loader2, Inbox, Sparkles } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
-import { useApp } from '@/context/AppContext';
+import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+
+type NotificationSender = {
+  id?: string;
+  full_name?: string;
+  avatar_url?: string;
+  public_photos?: string[];
+};
+
+type NotificationRecord = {
+  id: string;
+  type: string;
+  created_at: string;
+  sender?: NotificationSender;
+};
 
 export default function NotificationsTab() {
   const { user } = useAuth();
-  const { setUnreadInbox } = useApp();
   const [activeTab, setActiveTab] = useState<'interaction' | 'system'>('interaction');
-  const [notifications, setNotifications] = useState<Array<{
-    id: string;
-    type: string;
-    created_at: string;
-    sender?: { id?: string; full_name?: string; avatar_url?: string };
-  }>>([]);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -28,13 +36,13 @@ export default function NotificationsTab() {
     try {
       const { data, error } = await supabase
         .from('notifications')
-        .select(`id, type, created_at, sender:sender_id (id, full_name, avatar_url)`)
+        .select(`id, type, created_at, sender:sender_id (id, full_name, avatar_url, public_photos)`)
         .eq('receiver_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setNotifications((data ?? []) as Array<{ id: string; type: string; created_at: string; sender?: { id?: string; full_name?: string; avatar_url?: string } }>);
+      setNotifications((data ?? []) as NotificationRecord[]);
       setErrorMessage(null);
     } catch (err) {
       console.error('🔴 獲取通知失敗:', err);
@@ -46,13 +54,8 @@ export default function NotificationsTab() {
   }, [user?.id]);
 
   useEffect(() => {
-    setUnreadInbox(0);
-    fetchNotifications();
-
-    return () => {
-      setUnreadInbox(0);
-    };
-  }, [fetchNotifications, setUnreadInbox]);
+    void fetchNotifications();
+  }, [fetchNotifications]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -134,7 +137,9 @@ export default function NotificationsTab() {
             ) : (
               notifications.map((notif) => {
                 const sender = notif.sender || {};
-                const senderName = typeof sender.full_name === 'string' ? sender.full_name : '未設定名稱';
+                const rawSenderName = sender.full_name ?? '';
+                const senderName = isValidProfileName(rawSenderName) ? rawSenderName : '尚未設定名稱';
+                const senderPhoto = getPublicProfilePhoto(sender.public_photos, sender.avatar_url);
 
                 let message = '傳送了通知';
                 let IconComponent = Heart;
@@ -146,9 +151,9 @@ export default function NotificationsTab() {
 
                 return (
                   <div key={notif.id} className="flex items-center gap-4 py-4 border-b border-white/5 hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                    <div className={`relative w-12 h-12 rounded-full ${!sender.avatar_url ? `bg-gradient-to-br ${getGradient(sender.id)}` : 'bg-slate-800'} flex items-center justify-center shrink-0 overflow-hidden`}>
-                      {sender.avatar_url ? (
-                         <img src={sender.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                    <div className={`relative w-12 h-12 rounded-full ${!senderPhoto ? `bg-gradient-to-br ${getGradient(sender.id)}` : 'bg-slate-800'} flex items-center justify-center shrink-0 overflow-hidden`}>
+                      {senderPhoto ? (
+                         <img src={senderPhoto} alt={`${senderName} 的公開照片`} className="w-full h-full object-cover" />
                       ) : (
                          <span className="text-white font-bold tracking-tighter">{getInitials(senderName)}</span>
                       )}

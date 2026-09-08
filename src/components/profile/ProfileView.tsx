@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
   BadgeCheck, Crown, Loader2, Scan, EyeOff,
-  ChevronRight, Settings, LogOut, Ghost, X, Heart,
+  ChevronRight, Settings, LogOut, X, Heart,
   Check, Ruler, VenetianMask, Instagram, Facebook, Twitter, Send,
   Download, Trash2, Lock, Image as ImageIcon, ShieldCheck,
   Ban, MessageCircle, Plus, User, Calendar, Scale, AlignLeft,
@@ -10,10 +10,9 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import * as nsfwjs from 'nsfwjs';
 // ✅ 總監新增：匯入 Supabase 客戶端，準備執行徹底登出
 import { supabase } from '@/supabaseClient'; 
-import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+import { getPublicProfileGallery, getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 import {
   loadOwnerPrivatePhotos,
   persistOwnerPrivatePhotos,
@@ -50,10 +49,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     isVerified,
     myAvatar,
     setMyAvatar,
-    stealthMode,
-    setStealthMode,
-    travelMode,
-    setTravelMode,
   } = useApp();
   const { user } = useAuth();
 
@@ -88,22 +83,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const loadProfileRunId = useRef(0);
 
   // AI 內容安全審核狀態
-  const [nsfwModel, setNsfwModel] = useState<nsfwjs.NSFWJS | null>(null);
+  const [nsfwModel, setNsfwModel] = useState<{ classify: (input: HTMLCanvasElement) => Promise<Array<{ className: string; probability: number }>> } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-
-  // 非同步載入 AI 模型
-  useEffect(() => {
-    const loadAIModel = async () => {
-      try {
-        const model = await nsfwjs.load();
-        setNsfwModel(model);
-        console.log("🛡️ 內容安全審核 AI 引擎載入成功");
-      } catch (error) {
-        console.error("AI 引擎載入失敗:", error);
-      }
-    };
-    loadAIModel();
-  }, []);
 
   // ==========================================
   // 核心領域模型 (Domain Models)
@@ -127,16 +108,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     privatePhotos: [] as string[],
   });
 
-  const [accessRequests, setAccessRequests] = useState<{ id: string; name: string; status: 'pending' | 'granted'; avatar: string }[]>([]);
-
-  const [notifications, setNotifications] = useState({
-    newMatch: true,
-    newMessage: true,
-    profileLike: false,
-    appUpdates: true,
-    emailPromo: false
-  });
-  const [undoSkip, setUndoSkip] = useState(false);
 
   const LOOKING_FOR_OPTIONS = ['約會', '交友', '聊天', '打撲克', '不設限'];
   const ROLE_OPTIONS = ['不分', '依賴', '照顧', '互補', '不設限'];
@@ -209,11 +180,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     if (error) throw error;
   };
 
-  const toggleSetting = async (key: keyof typeof notifications, nextValue: boolean) => {
-    if (!user?.id) return;
-    setNotifications((prev) => ({ ...prev, [key]: nextValue }));
-  };
-
   useEffect(() => {
     let isMounted = true;
     const currentRunId = ++loadProfileRunId.current;
@@ -283,8 +249,23 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     });
   };
 
+  const getNsfwModel = async () => {
+    if (nsfwModel) return nsfwModel;
+    const { load } = await import('nsfwjs');
+    const model = await load();
+    setNsfwModel(model);
+    return model;
+  };
+
   const verifyImageSafe = async (dataUrl: string): Promise<boolean> => {
-    if (!nsfwModel) return true;
+    let model: NonNullable<typeof nsfwModel>;
+    try {
+      model = await getNsfwModel();
+    } catch (error) {
+      console.error('AI 引擎載入失敗:', error);
+      return false;
+    }
+
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = async () => {
@@ -298,18 +279,18 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             return;
           }
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const predictions = await nsfwModel.classify(canvas);
+          const predictions = await model.classify(canvas);
           const isUnsafe = predictions.some(
             (p: { className: string; probability: number }) =>
               (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.6
           );
           resolve(!isUnsafe);
         } catch {
-          resolve(true);
+          resolve(false);
         }
       };
       img.onerror = () => {
-        resolve(true);
+        resolve(false);
       };
       img.src = dataUrl;
     });
@@ -397,13 +378,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     });
   };
 
-  const handleAccessAction = async (userId: string, action: 'granted' | 'rejected' | 'revoked') => {
-    setAccessRequests((prev) => {
-      if (action === 'revoked' || action === 'rejected') return prev.filter(req => req.id !== userId);
-      return prev.map(req => req.id === userId ? { ...req, status: action } : req);
-    });
-  };
-
   // ✅ 總監升級：將函數改為 async 以支援後端非同步登出
   async function handleMenuClick(action: string) {
     switch (action) {
@@ -468,7 +442,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       const userData = {
         exportDate: new Date().toISOString(),
         userInfo: profile,
-        notificationSettings: notifications,
         privacySettings: { hideDistance: profile.hideDistance }
       };
       const blob = new Blob([JSON.stringify(userData, null, 2)], { type: 'application/json' });
@@ -527,7 +500,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     }
   };
 
-  const handleVipToggle = async (type: 'stealth' | 'travel' | 'hideDistance' | 'undoSkip', nextValue: boolean) => {
+  const handleVipToggle = async (nextValue: boolean) => {
     if (!hasVipAccess) {
       requestVipFeature();
       return;
@@ -536,25 +509,16 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     const previousHideDistance = profile.hideDistance;
 
     try {
-      if (type === 'hideDistance') {
-        setProfile((prev) => ({ ...prev, hideDistance: nextValue }));
-        await persistVipToggle('hide_distance', nextValue);
-      }
-      if (type === 'stealth') {
-        setStealthMode(nextValue);
-      }
-      if (type === 'travel') {
-        setTravelMode(nextValue);
-      }
-      if (type === 'undoSkip') {
-        setUndoSkip(nextValue);
-      }
+      setProfile((prev) => ({ ...prev, hideDistance: nextValue }));
+      await persistVipToggle('hide_distance', nextValue);
     } catch (error) {
       console.error('VIP 設定更新失敗:', error);
       setProfile((prev) => ({ ...prev, hideDistance: previousHideDistance }));
       alert('VIP 設定更新失敗，已回復上一個狀態。');
     }
   };
+
+  const publicPhotoGallery = getPublicProfileGallery(profile.publicPhotos, myAvatar);
 
   return (
     <div className="h-full overflow-y-auto bg-slate-950 pb-8 relative">
@@ -580,17 +544,14 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         <div className="w-full px-4">
           <div className="rounded-[30px] border border-white/10 bg-slate-900/80 p-2 shadow-[0_25px_80px_rgba(76,29,149,0.28)] backdrop-blur-xl">
             <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 no-scrollbar pb-1">
-              {profile.publicPhotos.length > 0 ? (
-                profile.publicPhotos.map((img, idx) => (
+              {publicPhotoGallery.length > 0 ? (
+                publicPhotoGallery.map((img, idx) => (
                   <div key={idx} className="relative shrink-0 snap-center h-[360px] w-[78%] max-w-[300px] overflow-hidden rounded-[24px] border border-white/10 bg-slate-800 shadow-2xl">
                     <img src={img} alt={`Public ${idx}`} className="h-full w-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent" />
                     <div className="absolute inset-x-0 bottom-0 flex items-center justify-between p-4">
                       <span className="rounded-full border border-white/15 bg-black/20 px-2 py-1 text-[10px] font-medium text-white/80 backdrop-blur-sm">
-                        {idx + 1} / {profile.publicPhotos.length}
-                      </span>
-                      <span className="rounded-full border border-violet-400/30 bg-violet-500/20 px-2 py-1 text-[10px] font-medium text-violet-100 backdrop-blur-sm">
-                        Feature
+                        {idx + 1} / {publicPhotoGallery.length}
                       </span>
                     </div>
                   </div>
@@ -614,37 +575,38 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
           </div>
           
           <div className="flex items-center justify-center gap-3 mt-2">
-            <p className="text-gray-400 text-sm flex items-center gap-1">
-              {profile.location} ‧ <span className={`font-medium ${stealthMode ? "text-slate-400" : "text-green-400"}`}>{stealthMode ? '隱身中' : '上線中'}</span>
-            </p>
-            <button onClick={() => handleVipToggle('stealth', !stealthMode)} className={`relative inline-flex h-6 w-[42px] items-center rounded-full transition-colors focus:outline-none ${stealthMode ? 'bg-slate-600' : 'bg-white/10'}`}>
-              <span className={`inline-flex h-[18px] w-[18px] transform items-center justify-center rounded-full transition-transform ${stealthMode ? 'translate-x-[22px] bg-slate-300' : 'translate-x-0.5 bg-gray-400'}`}>
-                {stealthMode ? <Ghost className="w-3 h-3 text-slate-800" /> : <Crown className="w-3 h-3 text-slate-800" />}
-              </span>
-            </button>
+            <div className="text-gray-400 text-sm flex items-center gap-1">
+              {profile.location && <span>{profile.location}</span>}
+              <span className="font-medium text-slate-400">公開狀態設定尚未開放</span>
+            </div>
           </div>
 
           <div className="mt-5 px-4">
-            <p className="text-slate-300 text-sm line-clamp-3 leading-relaxed text-left bg-slate-950 p-4 rounded-2xl border border-white/5">{profile.bio}</p>
+            <p className="text-slate-300 text-sm line-clamp-3 leading-relaxed text-left bg-slate-950 p-4 rounded-2xl border border-white/5">{profile.bio || '尚未填寫自我介紹'}</p>
             
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-              <div className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 px-3 py-1.5 rounded-full">
+              {profile.tribe && TRIBE_OPTIONS.some((tribe) => tribe.id === profile.tribe) && <div className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 px-3 py-1.5 rounded-full">
                 <span className="text-violet-300 text-xs font-medium flex items-center gap-1.5">
                   {TRIBE_OPTIONS.find(t => t.id === profile.tribe)?.icon} 
                   {TRIBE_OPTIONS.find(t => t.id === profile.tribe)?.label}
                 </span>
               </div>
-              <div className="inline-flex flex-wrap items-center justify-center gap-1.5 bg-violet-500/20 border border-violet-500/30 px-3 py-1.5 rounded-full">
+              }
+              {profile.lookingFor.length > 0 && <div className="inline-flex flex-wrap items-center justify-center gap-1.5 bg-violet-500/20 border border-violet-500/30 px-3 py-1.5 rounded-full">
                 <Heart className="w-3.5 h-3.5 text-violet-400" />
                 <span className="text-violet-300 text-xs font-medium">找：{profile.lookingFor.join(' · ')}</span>
               </div>
-              <div className="inline-flex flex-wrap items-center justify-center gap-1.5 bg-sky-500/10 border border-sky-500/20 px-3 py-1.5 rounded-full">
+              }
+              {profile.role.length > 0 && <div className="inline-flex flex-wrap items-center justify-center gap-1.5 bg-sky-500/10 border border-sky-500/20 px-3 py-1.5 rounded-full">
                 <VenetianMask className="w-3.5 h-3.5 text-sky-400" />
                 <span className="text-sky-300 text-xs font-medium">偏好：{profile.role.join(' · ')}</span>
               </div>
+              }
               {(profile.height || profile.weight) && (
                 <div className="inline-flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-full">
-                  <span className="text-slate-300 text-xs font-medium">{profile.height}cm · {profile.weight}kg</span>
+                  <span className="text-slate-300 text-xs font-medium">
+                    {[profile.height && `${profile.height}cm`, profile.weight && `${profile.weight}kg`].filter(Boolean).join(' · ')}
+                  </span>
                 </div>
               )}
             </div>
@@ -691,9 +653,6 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                 {item === '封鎖名單' && <Ban className="w-4 h-4 text-slate-400" />}
                 <span className="text-white/80 text-sm">{item}</span>
               </div>
-              {item === '隱私設定' && accessRequests.some(r => r.status === 'pending') && (
-                <div className="w-2 h-2 rounded-full bg-red-500 ml-auto mr-3 animate-pulse" />
-              )}
               <ChevronRight className="w-4 h-4 text-white/20" />
             </button>
           ))}
@@ -897,27 +856,21 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                   <h4 className="text-white font-medium text-sm flex items-center gap-2"><Heart className="w-4 h-4 text-pink-500" /> 新的配對</h4>
                   <p className="text-slate-400 text-xs mt-1">有人與您互相喜歡時通知</p>
                 </div>
-                <ToggleSwitch isOn={notifications.newMatch} onToggle={() => toggleSetting('newMatch', !notifications.newMatch)} />
+                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
               </div>
               <div className="px-4 py-5 flex items-center justify-between">
                 <div>
                   <h4 className="text-white font-medium text-sm flex items-center gap-2"><MessageCircle className="w-4 h-4 text-blue-400" /> 新的訊息</h4>
                   <p className="text-slate-400 text-xs mt-1">收到新聊天訊息時通知</p>
                 </div>
-                <ToggleSwitch isOn={notifications.newMessage} onToggle={() => toggleSetting('newMessage', !notifications.newMessage)} />
+                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
               </div>
               <div className="px-4 py-5 flex items-center justify-between opacity-80">
                 <div>
                   <h4 className="text-white font-medium text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-violet-400" /> 誰來看我 (VIP)</h4>
                   <p className="text-slate-400 text-xs mt-1">有人瀏覽您的檔案時通知</p>
                 </div>
-                {hasVipAccess ? (
-                  <ToggleSwitch isOn={notifications.profileLike} onToggle={() => toggleSetting('profileLike', !notifications.profileLike)} />
-                ) : entitlementStatus === 'ready' ? (
-                  <button onClick={requestVipUpgrade} className="flex items-center gap-1 bg-amber-500/20 text-amber-500 px-3 py-1 rounded-full text-xs font-bold"><Crown className="w-3 h-3" /> 解鎖</button>
-                ) : (
-                  <span className="text-xs text-white/40">{entitlementStatus === 'loading' ? '確認中…' : '無法確認'}</span>
-                )}
+                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
               </div>
             </div>
 
@@ -928,14 +881,14 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                   <h4 className="text-white font-medium text-sm">系統公告</h4>
                   <p className="text-slate-400 text-xs mt-1">重大更新與維護通知</p>
                 </div>
-                <ToggleSwitch isOn={notifications.appUpdates} onToggle={() => toggleSetting('appUpdates', !notifications.appUpdates)} />
+                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
               </div>
               <div className="px-4 py-5 flex items-center justify-between">
                 <div>
                   <h4 className="text-white font-medium text-sm">優惠活動信件</h4>
                   <p className="text-slate-400 text-xs mt-1">接收 VIP 促銷與活動 Email</p>
                 </div>
-                <ToggleSwitch isOn={notifications.emailPromo} onToggle={() => toggleSetting('emailPromo', !notifications.emailPromo)} />
+                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
               </div>
             </div>
           </div>
@@ -960,35 +913,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                   <Lock className="w-4 h-4" /> 私密相簿權限管理
                 </h4>
               </div>
-              <div className="divide-y divide-white/5">
-                {accessRequests.length === 0 ? (
-                  <p className="text-slate-500 text-xs p-6 text-center">目前沒有任何權限請求</p>
-                ) : (
-                  accessRequests.map(req => (
-                    <div key={req.id} className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <img src={req.avatar} alt={req.name} className="w-10 h-10 rounded-full bg-slate-800" />
-                        <div>
-                          <p className="text-slate-200 text-sm font-medium">{req.name}</p>
-                          <p className={`text-xs ${req.status === 'pending' ? 'text-amber-500' : 'text-emerald-500'}`}>
-                            {req.status === 'pending' ? '要求查看您的私密相簿' : '已取得觀看權限'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {req.status === 'pending' ? (
-                          <>
-                            <button onClick={() => handleAccessAction(req.id, 'rejected')} className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-red-400 transition-colors"><X className="w-4 h-4" /></button>
-                            <button onClick={() => handleAccessAction(req.id, 'granted')} className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/40 transition-colors"><Check className="w-4 h-4" /></button>
-                          </>
-                        ) : (
-                          <button onClick={() => handleAccessAction(req.id, 'revoked')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors text-xs font-medium"><UserX className="w-3.5 h-3.5" /> 收回權限</button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              <p className="p-6 text-center text-xs leading-5 text-slate-500">存取申請、核准與撤銷需要後端授權契約；目前尚未開放，沒有任何權限變更會在此畫面執行。</p>
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5 flex items-center justify-between">
@@ -996,7 +921,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                 <h4 className="text-white font-medium text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400" /> 隱藏精確距離</h4>
                 <p className="text-slate-400 text-xs mt-1">開啟後，別人將無法看到你目前的精確位置。</p>
               </div>
-              <ToggleSwitch isOn={profile.hideDistance} onToggle={() => handleVipToggle('hideDistance', !profile.hideDistance)} />
+              <ToggleSwitch isOn={profile.hideDistance} onToggle={() => handleVipToggle(!profile.hideDistance)} />
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5 flex items-center justify-between">
@@ -1004,7 +929,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                 <h4 className="text-white font-medium text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-violet-400" /> 旅行模式</h4>
                 <p className="text-slate-400 text-xs mt-1">切換到旅行風格偏好，讓他人看到你的旅遊狀態。</p>
               </div>
-              <ToggleSwitch isOn={travelMode} onToggle={() => handleVipToggle('travel', !travelMode)} />
+              <span className="text-xs text-slate-500">尚未提供伺服器設定</span>
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5 flex items-center justify-between">
@@ -1012,7 +937,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                 <h4 className="text-white font-medium text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-sky-400" /> 反悔跳過</h4>
                 <p className="text-slate-400 text-xs mt-1">啟用後可在快速滑動中回復上一位候選人。</p>
               </div>
-              <ToggleSwitch isOn={undoSkip} onToggle={() => handleVipToggle('undoSkip', !undoSkip)} />
+              <span className="text-xs text-slate-500">功能尚未開放</span>
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl p-4">

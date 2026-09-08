@@ -3,8 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Heart, MessageCircle, Lock, BadgeCheck, Crown, ShieldOff, MapPin, Ruler, Users, Search, Rocket } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/supabaseClient';
-import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
+import { getPublicProfileGallery, isValidProfileName } from '@/utils/profile';
 import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
 
 interface ProfileUser {
@@ -12,7 +11,7 @@ interface ProfileUser {
   full_name?: string;
   avatar_url?: string;
   public_photos?: string[];
-  distance?: string;
+  location?: string;
   age?: string | number;
   isVerified?: boolean;
   isVIP?: boolean;
@@ -34,13 +33,27 @@ export default function ProfileModal({ user, onClose }: Props) {
   const { user: currentUser } = useAuth();
   
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
-  const [showPrivateAlbum, setShowPrivateAlbum] = useState(false);
   const [likeState, setLikeState] = useState<'idle' | 'submitting' | 'sent' | 'cooldown' | 'error'>('idle');
   const [boostState, setBoostState] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
   const [interactionMessage, setInteractionMessage] = useState<string | null>(null);
   const [interactionMessageIsError, setInteractionMessageIsError] = useState(false);
-  const primaryPhoto = getPublicProfilePhoto(user.public_photos, user.avatar_url);
+  const publicGallery = getPublicProfileGallery(user.public_photos, user.avatar_url);
+  const primaryPhoto = publicGallery[0];
   const displayName = isValidProfileName(user.full_name ?? '') ? user.full_name : '';
+  const displayAge = typeof user.age === 'number'
+    ? Number.isFinite(user.age) && user.age > 0 ? String(user.age) : undefined
+    : typeof user.age === 'string' && user.age.trim().length > 0 ? user.age.trim() : undefined;
+  const status = typeof user.status === 'string' && user.status.trim().length > 0 ? user.status.trim() : undefined;
+  const tribe = typeof user.tribe === 'string' && user.tribe.trim().length > 0 ? user.tribe.trim() : undefined;
+  const bio = typeof user.bio === 'string' && user.bio.trim().length > 0 ? user.bio.trim() : undefined;
+  const location = typeof user.location === 'string' && user.location.trim().length > 0 ? user.location.trim() : undefined;
+  const profileDetails = [
+    { icon: Ruler, label: '身高', value: user.height },
+    { icon: Users, label: '角色', value: user.role },
+    { icon: Search, label: '尋找', value: user.looking_for },
+  ].filter((detail): detail is { icon: typeof Ruler; label: string; value: string } => (
+    typeof detail.value === 'string' && detail.value.trim().length > 0
+  ));
   const targetId = user.id ?? null;
   const hasInteractionTarget = Boolean(targetId && currentUser?.id && targetId !== currentUser.id);
   const isBlocked = Boolean(targetId && blockedUsers.has(targetId));
@@ -155,25 +168,6 @@ export default function ProfileModal({ user, onClose }: Props) {
     }
   }
 
-  async function handleRequestAlbum() {
-    if (showPrivateAlbum) return;
-    setShowPrivateAlbum(true);
-    try {
-      const { error } = await supabase.from('notifications').insert({
-        receiver_id: user?.id,
-        sender_id: currentUser?.id,
-        type: 'album_request'
-      });
-      if (error) throw error;
-      alert('已送出私密相簿查看申請！');
-    } catch (error: unknown) {
-      console.error("申請相簿失敗:", error);
-      const message = error instanceof Error ? error.message : '未知錯誤';
-      alert(`申請失敗：${message}`);
-      setShowPrivateAlbum(false);
-    }
-  }
-
   function handleMessage() {
     window.dispatchEvent(new CustomEvent('jump-to-chat', { detail: user }));
     onClose();
@@ -216,10 +210,6 @@ export default function ProfileModal({ user, onClose }: Props) {
                 <span className="text-red-400 text-xs font-medium">封鎖</span>
               </button>
             </div>
-            <div className="absolute bottom-4 right-4 bg-slate-950/70 backdrop-blur-xl border border-white/10 rounded-full px-3 py-1 flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-violet-400"/>
-              <span className="text-white/80 text-xs font-medium">{user?.distance || '< 100m'}</span>
-            </div>
           </div>
           
           <div className="px-5 pt-4 space-y-4">
@@ -227,48 +217,51 @@ export default function ProfileModal({ user, onClose }: Props) {
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-white text-xl font-bold">{displayName || '尚未設定名稱'}</h2>
-                  <span className="text-white/40">,</span>
-                  <span className="text-white/60 text-lg">{user?.age || '25'}</span>
+                  {displayAge && <><span className="text-white/40">,</span><span className="text-white/60 text-lg">{displayAge}</span></>}
                   {user?.isVerified && <BadgeCheck className="w-5 h-5 text-cyan-400"/>}
                   {user?.isVIP && <Crown className="w-4 h-4 text-amber-500"/>}
                 </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${user?.status === 'online' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/8 text-white/40'}`}>
-                    {user?.status === 'online' ? '● 上線中' : '近期上線'}
-                  </span>
-                  <span className="text-white/30 text-xs capitalize">{user?.tribe || '未分類'}</span>
-                </div>
+                {(status || tribe) && <div className="flex items-center gap-2 mt-1">
+                  {status && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-white/8 text-white/60">{status}</span>}
+                  {tribe && <span className="text-white/30 text-xs capitalize">{tribe}</span>}
+                </div>}
+                {location && <div className="mt-2 flex items-center gap-1 text-xs text-white/50">
+                  <MapPin className="h-3 w-3 text-violet-300" />
+                  <span>{location}</span>
+                </div>}
               </div>
             </div>
 
-            <p className="text-white/65 text-sm leading-relaxed">{user?.bio || '這個人很神祕，還沒有寫下任何介紹。'}</p>
+            <p className="text-white/65 text-sm leading-relaxed">{bio ?? '尚未填寫自我介紹'}</p>
 
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { icon: Ruler, label: '身高', val: user?.height || '未填寫' },
-                { icon: Users, label: '角色', val: user?.role || '探索中' },
-                { icon: Search, label: '尋找', val: user?.looking_for || '聊天' },
-              ].map(s => {
-                const Icon = s.icon;
+            {profileDetails.length > 0 && <div className={`grid gap-2 ${profileDetails.length === 1 ? 'grid-cols-1' : profileDetails.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              {profileDetails.map((detail) => {
+                const Icon = detail.icon;
                 return (
-                  <div key={s.label} className="bg-white/5 border border-white/8 rounded-xl p-3 text-center">
+                  <div key={detail.label} className="bg-white/5 border border-white/8 rounded-xl p-3 text-center">
                     <Icon className="w-4 h-4 text-white/30 mx-auto mb-1"/>
-                    <p className="text-white/80 text-xs font-semibold">{s.val}</p>
-                    <p className="text-white/30 text-[10px]">{s.label}</p>
+                    <p className="text-white/80 text-xs font-semibold">{detail.value}</p>
+                    <p className="text-white/30 text-[10px]">{detail.label}</p>
                   </div>
                 );
               })}
-            </div>
+            </div>}
 
-            <div onClick={handleRequestAlbum} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex items-center gap-3 cursor-pointer hover:bg-amber-500/10 transition-all pointer-events-auto">
+            {publicGallery.length > 1 && <div className="grid grid-cols-3 gap-2">
+              {publicGallery.slice(1).map((photo, index) => (
+                <img key={photo} src={photo} alt={`${displayName || '個人檔案'} 公開照片 ${index + 2}`} className="aspect-square w-full rounded-xl object-cover border border-white/10" />
+              ))}
+            </div>}
+
+            <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/30 to-amber-600/20 flex items-center justify-center">
                 <Lock className="w-5 h-5 text-amber-500"/>
               </div>
               <div className="flex-1">
                 <p className="text-white/80 text-sm font-semibold">私密相簿</p>
-                <p className="text-white/40 text-xs">8 張照片 · 申請查看</p>
+                <p className="text-white/40 text-xs">存取申請功能尚未開放</p>
               </div>
-              {showPrivateAlbum && <span className="text-amber-400 text-xs">已申請 ✓</span>}
+              <span className="text-amber-400/70 text-xs">暫不可用</span>
             </div>
           </div>
         </div>

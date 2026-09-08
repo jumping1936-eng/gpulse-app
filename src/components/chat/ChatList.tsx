@@ -3,13 +3,44 @@ import { MessageCircle, User as UserIcon, Loader2, Sparkles } from 'lucide-react
 import { Conversation, DBProfile } from '@/types';
 import { supabase } from '@/supabaseClient';
 import { useApp } from '@/context/AppContext';
+import { useAuth } from '@/context/AuthContext';
 
 interface Props {
   onOpenConvo: (c: Conversation) => void;
 }
 
+type MemberState = {
+  conversation_id: string;
+  cleared_at: string | null;
+};
+
+type PreviewMessage = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+  is_hidden: boolean | null;
+  is_vanish: boolean | null;
+};
+
+const isMessageVisible = (message: PreviewMessage, clearedAt: string | null): boolean => {
+  if (message.is_hidden === true) return false;
+  if (clearedAt === null) return true;
+
+  return new Date(message.created_at).getTime() > new Date(clearedAt).getTime();
+};
+
+const formatPreview = (message: PreviewMessage): string => {
+  if (message.is_vanish === true) return '🔥 [限時私密訊息]';
+  if (message.content.startsWith('data:image')) return '[圖片]';
+  return message.content;
+};
+
 export default function ChatList({ onOpenConvo }: Props) {
   const { setUnreadChat, blockedUsers } = useApp();
+  const { user: currentUser } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -17,19 +48,22 @@ export default function ChatList({ onOpenConvo }: Props) {
     setUnreadChat(0);
   }, [setUnreadChat]);
 
-  const formatMessageTime = (value?: string) => {
-    if (!value) return '剛剛';
+  const formatMessageTime = (value?: string): string | null => {
+    if (!value) return null;
 
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '剛剛';
+    if (Number.isNaN(date.getTime())) return null;
 
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const fetchConversations = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!currentUser) {
+        setConversations([]);
+        setUnreadChat(0);
+        return;
+      }
 
       const { data, error } = await supabase
         .from('conversations')
@@ -38,51 +72,126 @@ export default function ChatList({ onOpenConvo }: Props) {
           user1:profiles!user1_id(id, full_name, avatar_url),
           user2:profiles!user2_id(id, full_name, avatar_url)
         `)
-        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+        .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
         .order('last_message_time', { ascending: false });
 
       if (error) throw error;
 
-      const formattedConvos = data
+      const conversationRows = data ?? [];
+      const conversationIds = conversationRows
+        .map((convo: Record<string, unknown>) => typeof convo.id === 'string' ? convo.id : null)
+        .filter((id): id is string => id !== null);
+
+      if (conversationIds.length === 0) {
+        setConversations([]);
+        setUnreadChat(0);
+        return;
+      }
+
+      const [memberStateResponse, messagesResponse] = await Promise.all([
+        supabase
+          .from('conversation_member_state')
+          .select('conversation_id, cleared_at')
+          .eq('profile_id', currentUser.id)
+          .in('conversation_id', conversationIds),
+        supabase
+          .from('messages')
+          .select('id, conversation_id, sender_id, content, created_at, is_read, is_hidden, is_vanish')
+          .in('conversation_id', conversationIds)
+          .order('created_at', { ascending: false }),
+      ]);
+
+      if (memberStateResponse.error) throw memberStateResponse.error;
+      if (messagesResponse.error) throw messagesResponse.error;
+
+      const clearedAtByConversation = new Map<string, string | null>();
+      for (const state of (memberStateResponse.data ?? []) as MemberState[]) {
+        clearedAtByConversation.set(state.conversation_id, state.cleared_at);
+      }
+
+      const newestVisibleMessageByConversation = new Map<string, PreviewMessage>();
+      const unreadByConversation = new Map<string, number>();
+      for (const message of (messagesResponse.data ?? []) as PreviewMessage[]) {
+        const clearedAt = clearedAtByConversation.get(message.conversation_id) ?? null;
+        if (!isMessageVisible(message, clearedAt)) continue;
+
+        if (!newestVisibleMessageByConversation.has(message.conversation_id)) {
+          newestVisibleMessageByConversation.set(message.conversation_id, message);
+        }
+
+        if (message.sender_id !== currentUser.id && !message.is_read) {
+          unreadByConversation.set(
+            message.conversation_id,
+            (unreadByConversation.get(message.conversation_id) ?? 0) + 1,
+          );
+        }
+      }
+
+      const formattedConvos = conversationRows
         .map((convo: Record<string, unknown>): Conversation | null => {
-          const isUser1 = (convo.user1_id as string) === user.id;
+          const isUser1 = (convo.user1_id as string) === currentUser.id;
           const otherUser = isUser1 ? (convo.user2 as Record<string, unknown>) : (convo.user1 as Record<string, unknown>);
 
           const otherUserId = typeof otherUser?.id === 'string' ? otherUser.id : null;
           if (!otherUserId) return null;
           if (blockedUsers.has(otherUserId)) return null;
 
+          const conversationId = String(convo.id);
+          const previewMessage = newestVisibleMessageByConversation.get(conversationId);
+
           return {
-            id: String(convo.id),
+            id: conversationId,
             created_at: typeof convo.created_at === 'string' ? convo.created_at : undefined,
             user1_id: typeof convo.user1_id === 'string' ? convo.user1_id : undefined,
             user2_id: typeof convo.user2_id === 'string' ? convo.user2_id : undefined,
-            last_message: typeof convo.last_message === 'string' ? convo.last_message : '尚未開始對話',
-            last_message_time: typeof convo.last_message_time === 'string' ? convo.last_message_time : undefined,
+            last_message: previewMessage ? formatPreview(previewMessage) : undefined,
+            last_message_time: previewMessage?.created_at,
             other_user: otherUser as unknown as DBProfile,
-            unread: typeof convo.unread === 'number' ? convo.unread : 0,
+            unread: unreadByConversation.get(conversationId) ?? 0,
           };
         })
-        .filter((convo): convo is Conversation => convo !== null);
+        .filter((convo): convo is Conversation => convo !== null)
+        .sort((left, right) => {
+          const leftTime = left.last_message_time ? new Date(left.last_message_time).getTime() : 0;
+          const rightTime = right.last_message_time ? new Date(right.last_message_time).getTime() : 0;
+          return rightTime - leftTime;
+        });
 
       setConversations(formattedConvos);
+      setUnreadChat(formattedConvos.reduce((total, convo) => total + (convo.unread ?? 0), 0));
     } catch (error) {
       console.error('🔴 讀取聊天列表失敗:', error);
     } finally {
       setLoading(false);
     }
-  }, [blockedUsers]);
+  }, [blockedUsers, currentUser, setUnreadChat]);
 
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
 
   useEffect(() => {
+    if (!currentUser) return;
+
     const channel = supabase
-      .channel('public:conversations')
+      .channel(`chat-list:${currentUser.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'conversations' },
+        () => {
+          fetchConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages' },
+        () => {
+          fetchConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversation_member_state', filter: `profile_id=eq.${currentUser.id}` },
         () => {
           fetchConversations();
         }
@@ -92,11 +201,11 @@ export default function ChatList({ onOpenConvo }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchConversations]);
+  }, [currentUser, fetchConversations]);
 
   const recentMatches = conversations.slice(0, 8).map((convo) => ({
     id: convo.id,
-    name: convo.other_user?.full_name || '探索新朋友',
+    name: convo.other_user?.full_name || '尚未設定名稱',
     avatar: convo.other_user?.avatar_url || '',
   }));
 
@@ -184,16 +293,16 @@ export default function ChatList({ onOpenConvo }: Props) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span className="font-semibold text-white text-base truncate">
-                        {convo.other_user?.full_name || '無名探索者'}
+                        {convo.other_user?.full_name || '尚未設定名稱'}
                       </span>
-                      <span className="text-white/35 text-[11px] flex-shrink-0">
+                      {formatMessageTime(convo.last_message_time) && <span className="text-white/35 text-[11px] flex-shrink-0">
                         {formatMessageTime(convo.last_message_time)}
-                      </span>
+                      </span>}
                     </div>
 
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm text-white/55 truncate flex-1">
-                        {convo.last_message || '開始新的對話吧'}
+                        {convo.last_message || '尚無新訊息'}
                       </p>
                       {unreadCount > 0 && (
                         <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500/90 text-[10px] font-bold text-white px-1">

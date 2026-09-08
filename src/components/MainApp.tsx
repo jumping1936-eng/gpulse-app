@@ -15,7 +15,7 @@ import BlockedUsersList from '@/components/profile/BlockedUsersList';
 import { supabase } from '@/supabaseClient'; 
 
 export default function MainApp() {
-  const { stealthMode, unreadInbox, setUnreadInbox, unreadChat, setUnreadChat, showPaywall, dismissPaywall, blockedUsers, blockListStatus } = useApp();
+  const { stealthMode, unreadChat, setUnreadChat, showPaywall, dismissPaywall, blockedUsers, blockListStatus } = useApp();
   const { user: currentUser } = useAuth(); 
   
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -68,8 +68,8 @@ export default function MainApp() {
           created_at: convoData.created_at,
           user1_id: convoData.user1_id,
           user2_id: convoData.user2_id,
-          last_message: convoData.last_message || '開始新的對話吧',
-          last_message_time: convoData.last_message_time || new Date().toISOString(),
+          last_message: typeof convoData.last_message === 'string' ? convoData.last_message : undefined,
+          last_message_time: typeof convoData.last_message_time === 'string' ? convoData.last_message_time : undefined,
           unread: 0,
           other_user: (otherUser || targetUser) as Conversation['other_user'],
         } as Conversation);
@@ -84,15 +84,14 @@ export default function MainApp() {
   }, [currentUser, blockedUsers, blockListStatus]);
 
   useEffect(() => {
-    if (activeTab === 'inbox') setUnreadInbox(0);
     if (activeTab === 'chat') setUnreadChat(0);
-  }, [activeTab, setUnreadInbox, setUnreadChat]);
+  }, [activeTab, setUnreadChat]);
 
   const tabs = [
     { id: 'home' as Tab, icon: Home, label: '首頁' },
     { id: 'explore' as Tab, icon: Compass, label: '探索' },
     { id: 'chat' as Tab, icon: MessageCircle, label: '聊天', badge: unreadChat },
-    { id: 'inbox' as Tab, icon: Bell, label: '通知', badge: unreadInbox },
+    { id: 'inbox' as Tab, icon: Bell, label: '通知' },
     { id: 'profile' as Tab, icon: User, label: '個人' },
   ];
 
@@ -131,7 +130,6 @@ export default function MainApp() {
                 onClick={() => { 
                   setActiveTab(tab.id); 
                   setActiveChatConvo(null); 
-                  if (tab.id === 'inbox') setUnreadInbox(0);
                   if (tab.id === 'chat') setUnreadChat(0);
                 }}
                 className="relative flex flex-col items-center gap-1 px-5 py-2 rounded-xl transition-all group pointer-events-auto"

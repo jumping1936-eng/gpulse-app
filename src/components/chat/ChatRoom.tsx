@@ -99,6 +99,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageError, setMessageError] = useState<string | null>(null);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [input, setInput] = useState('');
   const [vanishMode, setVanishMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -127,7 +128,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
   const chatRoomChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const clearedAtRef = useRef<string | null>(null);
 
-  const targetName = convo.other_user?.full_name || convo.name || '無名探索者';
+  const targetName = convo.other_user?.full_name || '尚未設定名稱';
   const targetAvatar = convo.other_user?.avatar_url || convo.avatar || '';
 
   useEffect(() => {
@@ -182,6 +183,8 @@ export default function ChatRoom({ convo, onBack }: Props) {
     } catch (error) {
       console.error('🔴 讀取訊息失敗:', error);
       setMessageError('無法載入訊息，請稍後再試。');
+    } finally {
+      setIsLoadingMessages(false);
     }
   }, [convo.id, markMessagesRead, myId]);
 
@@ -221,6 +224,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
     clearedAtRef.current = null;
     setClearedAt(null);
     setMessages([]);
+    setIsLoadingMessages(Boolean(myId));
 
     if (myId) {
       void fetchMessagesAndMarkRead();
@@ -359,24 +363,6 @@ export default function ChatRoom({ convo, onBack }: Props) {
     }
   };
 
-  const handleOpenPrivacyAccess = async () => {
-    setMenuOpen(false);
-    try {
-      if (currentUser?.id && convo.other_user?.id) {
-        const { error } = await supabase.from('notifications').insert({
-          receiver_id: convo.other_user.id,
-          sender_id: currentUser.id,
-          type: 'album_request',
-        });
-        if (error) throw error;
-      }
-      alert('已向對方發送隱私相簿開放權限申請。');
-    } catch (error) {
-      console.error('開放權限失敗:', error);
-      alert('開放權限請求失敗，請稍後再試。');
-    }
-  };
-
   const handleViewProfile = async () => {
     setMenuOpen(false);
     if (!convo.other_user?.id) return;
@@ -404,7 +390,6 @@ export default function ChatRoom({ convo, onBack }: Props) {
         height: typeof data.height === 'number' ? String(data.height) : undefined,
         role: Array.isArray(data.role) ? data.role.join(', ') : data.role,
         looking_for: Array.isArray(data.looking_for) ? data.looking_for.join(', ') : data.looking_for,
-        distance: undefined,
         isVIP: data.is_vip,
         isVerified: data.is_vip,
       });
@@ -520,14 +505,10 @@ export default function ChatRoom({ convo, onBack }: Props) {
                   <ShieldOff className="h-4 w-4 text-amber-400" />
                   封鎖此人
                 </button>
-                <button
-                  type="button"
-                  onClick={handleOpenPrivacyAccess}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
-                >
+                <div className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-500">
                   <Lock className="h-4 w-4 text-violet-400" />
-                  開放權限(隱私相簿)
-                </button>
+                  私密相簿存取尚未開放
+                </div>
                 <button
                   type="button"
                   onClick={handleViewProfile}
@@ -544,6 +525,11 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3 bg-[radial-gradient(circle_at_top,_rgba(124,58,237,0.08),_transparent_35%),linear-gradient(to_bottom,_rgba(15,23,42,0.95),_rgba(2,6,23,1))]">
         {messageError && <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-center text-xs text-rose-200">{messageError}</p>}
+        {!isLoadingMessages && !messageError && messages.length === 0 && (
+          <div className="flex h-full items-center justify-center text-center text-sm text-white/40">
+            尚無新訊息
+          </div>
+        )}
         {messages.map(msg => (
           <MessageBubble 
             key={msg.id} 

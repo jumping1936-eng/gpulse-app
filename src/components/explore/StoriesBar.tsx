@@ -109,7 +109,7 @@ export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) 
               
               {/* 取名字的第一個單字以防過長 */}
               <span className={`text-[10px] font-medium truncate max-w-[56px] ${isViewed ? 'text-white/30' : 'text-white/70'}`}>
-                {user.full_name?.split(' ')[0] || 'Unknown'}
+                {user.full_name?.split(' ')[0] || '尚未設定名稱'}
               </span>
             </div>
           );

@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "verify:gpulse": "node scripts/gpulse-verify.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

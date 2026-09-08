@@ -30,7 +30,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const hasToken = window.location.hash.includes('access_token');
       const hasError = window.location.search.includes('error=') || window.location.hash.includes('error');
       
-      if (hasCode || hasToken) console.log("🛡️ [Auth] 偵測到 OAuth 回呼，強制鎖定 Loading 等待解析...");
       return hasCode || hasToken || hasError;
     }
     return true;
@@ -42,7 +41,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) throw error;
         
-        console.log("🟢 [Auth] 初始化 Session 獲取:", session ? "成功" : "無資料");
         setSession(session);
         setUser(session?.user ?? null);
       } catch (error) {
@@ -55,8 +53,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log(`🌀 [Auth] 狀態事件觸發: ${event}`, session?.user?.email || "無使用者");
-      
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);

@@ -21,7 +21,7 @@ type StoryUser = {
 interface ProfileRecord {
   id: string;
   full_name: string;
-  age: number;
+  age: number | null;
   avatar_url: string;
   public_photos: string[];
   location: string;
@@ -37,9 +37,9 @@ interface ProfileRecord {
 interface NearbyUser {
   id: string;
   full_name: string;
-  age: number;
+  age: number | null;
   photo_url?: string;
-  city: string;
+  location: string;
   isVIP: boolean;
   isOnline: boolean;
   accent: string;
@@ -48,11 +48,12 @@ interface NearbyUser {
 interface Recommendation {
   id: string;
   full_name: string;
-  age: number;
+  age: number | null;
   photo_url?: string;
-  city: string;
+  location: string;
   bio: string;
   isVIP: boolean;
+  isOnline: boolean;
 }
 
 const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecord>): ProfileRecord[] => {
@@ -60,21 +61,20 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
     return [];
   }
 
-  return records.map((profile, index) => {
+  return records.flatMap((profile) => {
     const raw = profile as Record<string, unknown>;
+    const id = typeof raw.id === 'string' && raw.id.trim().length > 0 ? raw.id : null;
+    if (!id) return [];
     const rawName = typeof raw.full_name === 'string' ? raw.full_name : '';
     const name = isValidProfileName(rawName) ? rawName : '';
 
-    const age = Number.isFinite(Number(raw.age)) ? Number(raw.age) : 0;
+    const numericAge = Number(raw.age);
+    const age = Number.isFinite(numericAge) && numericAge > 0 ? numericAge : null;
     const avatar = typeof raw.avatar_url === 'string' ? raw.avatar_url : '';
     const publicPhotos = Array.isArray(raw.public_photos)
       ? raw.public_photos.filter((item): item is string => typeof item === 'string')
       : [];
-    const location = typeof raw.location === 'string'
-      ? raw.location
-      : typeof raw.city === 'string'
-        ? raw.city
-        : '';
+    const location = typeof raw.location === 'string' ? raw.location.trim() : '';
     const bio = typeof raw.bio === 'string' && raw.bio.trim().length > 0
       ? raw.bio
       : '';
@@ -100,13 +100,13 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
     }
 
     return {
-      id: String(raw.id ?? `profile-${index}`),
+      id,
       full_name: name,
       age,
       avatar_url: avatar,
       public_photos: publicPhotos,
       location,
-      is_vip: Boolean(raw.is_vip ?? raw.isVIP ?? false),
+      is_vip: raw.is_vip === true,
       status,
       bio,
       tribe,
@@ -191,7 +191,7 @@ export default function ExploreTab() {
       full_name: user.full_name,
       age: user.age,
       photo_url: getPublicProfilePhoto(user.public_photos, user.avatar_url),
-      city: user.location,
+      location: user.location,
       isVIP: user.is_vip,
       isOnline: user.status === 'online',
       accent: ['from-violet-500 to-blue-500', 'from-cyan-500 to-sky-500', 'from-amber-500 to-orange-500', 'from-pink-500 to-rose-500', 'from-emerald-500 to-teal-500'][user.id.charCodeAt(0) % 5],
@@ -205,9 +205,10 @@ export default function ExploreTab() {
         full_name: user.full_name,
         age: user.age,
         photo_url: getPublicProfilePhoto(user.public_photos, user.avatar_url),
-        city: user.location,
+        location: user.location,
         bio: user.bio,
         isVIP: user.is_vip,
+        isOnline: user.status === 'online',
       };
     });
   }, [visibleProfiles]);
@@ -248,8 +249,8 @@ export default function ExploreTab() {
         )}
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Nearby</p>
-            <h2 className="text-lg font-bold text-white">附近活躍使用者</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Discover</p>
+            <h2 className="text-lg font-bold text-white">探索使用者</h2>
           </div>
           <button className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-200">
             查看全部
@@ -272,7 +273,7 @@ export default function ExploreTab() {
         ) : nearbyUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/30">
             <Compass className="w-8 h-8" />
-            <p className="text-xs">附近暫時沒有其他使用者</p>
+            <p className="text-xs">暫時沒有其他使用者</p>
           </div>
         ) : (
           <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -302,22 +303,22 @@ export default function ExploreTab() {
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                       <div>
                         <p className="text-base font-bold leading-none text-white">{isValidProfileName(user.full_name) ? user.full_name : '尚未設定名稱'}</p>
-                        <p className="mt-1 text-[10px] text-white/80">{user.age}</p>
+                        {user.age && <p className="mt-1 text-[10px] text-white/80">{user.age}</p>}
                       </div>
-                      <div className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-slate-950/60 px-1.5 py-1 text-[9px] text-emerald-300 backdrop-blur-xl">
+                      {user.isOnline && <div className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-slate-950/60 px-1.5 py-1 text-[9px] text-emerald-300 backdrop-blur-xl">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        {user.isOnline ? 'online' : 'away'}
-                      </div>
+                        online
+                      </div>}
                     </div>
                   </div>
                 </div>
 
-                  <div className="mt-2 flex items-center justify-between text-[10px] text-slate-300">
+                  {user.location && <div className="mt-2 flex items-center justify-between text-[10px] text-slate-300">
                     <span className="flex items-center gap-1">
                       <MapPin className="h-3 w-3 text-violet-300" />
-                      {user.city}
+                      {user.location}
                     </span>
-                  </div>
+                  </div>}
               </button>
             ))}
           </div>
@@ -396,7 +397,7 @@ export default function ExploreTab() {
                       VIP
                     </div>
                   )}
-                  <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title="online" />
+                  {item.isOnline && <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title="online" />}
                 </div>
 
                 <div className="space-y-3 p-3">
@@ -406,14 +407,14 @@ export default function ExploreTab() {
                         <h3 className="text-base font-bold text-white">{isValidProfileName(item.full_name) ? item.full_name : '尚未設定名稱'}{item.age ? `, ${item.age}` : ''}</h3>
                         {item.isVIP && <Crown className="h-3.5 w-3.5 text-amber-400" />}
                       </div>
-                      <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">
+                      {item.location && <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">
                         <MapPin className="h-3 w-3 text-violet-300" />
-                        {item.city}
-                      </div>
+                        {item.location}
+                      </div>}
                     </div>
                   </div>
 
-                  <p className="text-[11px] leading-5 text-slate-300">{item.bio}</p>
+                  {item.bio && <p className="text-[11px] leading-5 text-slate-300">{item.bio}</p>}
                 </div>
               </article>
             ))}

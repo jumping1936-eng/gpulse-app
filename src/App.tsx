@@ -31,8 +31,6 @@ function AppContent() {
       const { error } = await supabase.from('profiles').select('id').limit(1);
       if (error) {
         console.error("❌ 連線失敗，請檢查金鑰或網路：", error.message);
-      } else {
-        console.log("✅ 資料庫連線成功！");
       }
     };
     testConnection();
