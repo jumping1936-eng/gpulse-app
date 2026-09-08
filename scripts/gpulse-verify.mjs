@@ -3,6 +3,17 @@ import path from 'node:path';
 
 const sourceRoot = path.resolve('src');
 const files = [];
+const storiesMigrationPath = path.resolve(
+  'supabase',
+  'migrations',
+  '20260909020000_add_secure_stories_contract.sql',
+);
+const storyFrontendFiles = [
+  path.join(sourceRoot, 'components', 'explore', 'ExploreTab.tsx'),
+  path.join(sourceRoot, 'components', 'explore', 'StoriesBar.tsx'),
+  path.join(sourceRoot, 'components', 'explore', 'StoryViewer.tsx'),
+  path.join(sourceRoot, 'components', 'explore', 'storyTypes.ts'),
+];
 
 function collectFiles(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -24,6 +35,20 @@ function countMatchesInFiles(filePredicate, pattern) {
     const content = fs.readFileSync(file, 'utf8');
     return count + [...content.matchAll(pattern)].length;
   }, 0);
+}
+
+function countMatchesInPaths(paths, pattern) {
+  return paths.reduce((count, file) => {
+    const content = fs.readFileSync(file, 'utf8');
+    return count + [...content.matchAll(pattern)].length;
+  }, 0);
+}
+
+function getMigrationFunctionSource(source, functionName) {
+  const match = source.match(new RegExp(
+    `CREATE FUNCTION public\\.${functionName}\\([\\s\\S]*?\\n\\$function\\$;`,
+  ));
+  return match?.[0] ?? '';
 }
 
 const failures = [];
@@ -60,6 +85,10 @@ checkTrue('self-test: 0 === 0', 0 === 0);
 checkFalse('self-test: 1 === 0', 1 === 0);
 
 collectFiles(sourceRoot);
+const storiesMigrationExists = fs.existsSync(storiesMigrationPath);
+const storiesMigrationSource = storiesMigrationExists
+  ? fs.readFileSync(storiesMigrationPath, 'utf8')
+  : '';
 const profileViewPath = path.join(sourceRoot, 'components', 'profile', 'ProfileView.tsx');
 const profileViewSource = fs.readFileSync(profileViewPath, 'utf8');
 const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
@@ -67,6 +96,43 @@ const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
 )].filter((match) => match[1].includes('navigator.geolocation.getCurrentPosition')).length;
 
 checkGreaterOrEqual('runtime source files scanned', files.length, 1);
+checkTrue('secure Stories migration exists', storiesMigrationExists);
+checkGreaterOrEqual('Stories table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.stories/g)].length, 1);
+checkGreaterOrEqual('Story view table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.story_views/g)].length, 1);
+checkEqual('approved Story RPC definitions', [...storiesMigrationSource.matchAll(/^CREATE FUNCTION public\.(?:create_own_story|delete_own_story|get_own_active_story|list_visible_stories|get_visible_story|mark_story_viewed)/gm)].length, 6);
+checkZero('Story migration CREATE OR REPLACE definitions', [...storiesMigrationSource.matchAll(/CREATE OR REPLACE/g)].length);
+checkZero('Story migration CREATE POLICY definitions', [...storiesMigrationSource.matchAll(/CREATE POLICY/g)].length);
+checkEqual('Story migration RLS enables', [...storiesMigrationSource.matchAll(/ENABLE ROW LEVEL SECURITY/g)].length, 2);
+checkEqual('Story migration authenticated execute grants', [...storiesMigrationSource.matchAll(/GRANT EXECUTE ON FUNCTION/g)].length, 6);
+checkZero('Story migration Storage mutations', [...storiesMigrationSource.matchAll(/storage\.|story-media/gi)].length);
+checkZero('Story migration Realtime mutations', [...storiesMigrationSource.matchAll(/supabase_realtime|CREATE PUBLICATION|ALTER PUBLICATION/gi)].length);
+checkGreaterOrEqual('Story list block helper usage', [...getMigrationFunctionSource(storiesMigrationSource, 'list_visible_stories').matchAll(/private\.is_interaction_blocked/g)].length, 1);
+checkGreaterOrEqual('Story media fetch block helper usage', [...getMigrationFunctionSource(storiesMigrationSource, 'get_visible_story').matchAll(/private\.is_interaction_blocked/g)].length, 1);
+checkGreaterOrEqual('Story viewed block helper usage', [...getMigrationFunctionSource(storiesMigrationSource, 'mark_story_viewed').matchAll(/private\.is_interaction_blocked/g)].length, 1);
+checkGreaterOrEqual('Story list LIMIT 100', [...getMigrationFunctionSource(storiesMigrationSource, 'list_visible_stories').matchAll(/LIMIT 100/g)].length, 1);
+const storyListReturn = getMigrationFunctionSource(storiesMigrationSource, 'list_visible_stories').match(/RETURNS TABLE \(([\s\S]*?)\)\nLANGUAGE/);
+checkFalse('Story list return excludes media_data', (storyListReturn?.[1] ?? '').includes('media_data'));
+checkFalse('Story list return excludes media_type', (storyListReturn?.[1] ?? '').includes('media_type'));
+checkGreaterOrEqual('Story create profile row lock', [...getMigrationFunctionSource(storiesMigrationSource, 'create_own_story').matchAll(/FOR UPDATE/g)].length, 1);
+checkGreaterOrEqual('Story create clock timestamp', [...getMigrationFunctionSource(storiesMigrationSource, 'create_own_story').matchAll(/pg_catalog\.clock_timestamp\(\)/g)].length, 1);
+checkGreaterOrEqual('Story UUID default is pg_catalog-qualified', [...storiesMigrationSource.matchAll(/DEFAULT pg_catalog\.gen_random_uuid\(\)/g)].length, 1);
+checkGreaterOrEqual('Story list RPC frontend usage', countMatches(/rpc\(\s*['"]list_visible_stories['"]/g), 1);
+checkGreaterOrEqual('Story media RPC frontend usage', countMatches(/rpc\(\s*['"]get_visible_story['"]/g), 1);
+checkGreaterOrEqual('Story viewed RPC frontend usage', countMatches(/rpc\(\s*['"]mark_story_viewed['"]/g), 1);
+checkGreaterOrEqual('Own Story RPC frontend usage', countMatches(/rpc\(\s*['"]get_own_active_story['"]/g), 1);
+checkGreaterOrEqual('Story create RPC frontend usage', countMatches(/rpc\(\s*['"]create_own_story['"]/g), 1);
+checkGreaterOrEqual('Story delete RPC frontend usage', countMatches(/rpc\(\s*['"]delete_own_story['"]/g), 1);
+checkZero('direct frontend Stories table queries', countMatches(/from\(\s*['"]stories['"]\s*\)/g));
+checkZero('direct frontend Story view table queries', countMatches(/from\(\s*['"]story_views['"]\s*\)/g));
+checkZero('direct frontend private Story-table access', countMatchesInPaths(storyFrontendFiles, /private\.(?:stories|story_views)/g));
+checkZero('Story Supabase Storage usage', countMatchesInPaths(storyFrontendFiles, /supabase\.storage/g));
+checkZero('Story Realtime usage', countMatchesInPaths(storyFrontendFiles, /(?:supabase\.channel|postgres_changes)/g));
+checkZero('local Story persistence', countMatchesInPaths(storyFrontendFiles, /(?:localStorage|sessionStorage|indexedDB)/gi));
+checkZero('fake hasStory runtime path', countMatchesInPaths(storyFrontendFiles, /\bhasStory\b/g));
+checkZero('fake storyViewed runtime path', countMatchesInPaths(storyFrontendFiles, /\bstoryViewed\b/g));
+checkZero('local viewedStories Set truth', countMatchesInPaths(storyFrontendFiles, /viewedStories/g));
+checkZero('private-photo Story copy path', countMatchesInPaths(storyFrontendFiles, /(?:profile_private_photos|private_photos|authorized_private)/g));
+checkZero('Story viewer identity/count exposure', countMatchesInPaths(storyFrontendFiles, /(?:viewer_id|viewerIds|viewer_count|viewerCount)/g));
 checkZero('legacy profiles.private_photos runtime references', countMatches(/profiles\.private_photos/g));
 checkZero('direct frontend conversation inserts', countMatches(/from\(\s*['"]conversations['"]\s*\)\s*\.insert\s*\(/gs));
 checkGreaterOrEqual('conversation creation RPC references', countMatches(/rpc\(\s*['"]get_or_create_conversation['"]/g), 1);

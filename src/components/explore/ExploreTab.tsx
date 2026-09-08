@@ -11,13 +11,12 @@ import { useApp } from '@/context/AppContext';
 import { ArrowUpRight, Crown, MapPin, Compass } from 'lucide-react';
 import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 import { DistanceBucket, useProfileDistanceBuckets } from '@/hooks/useProfileDistanceBuckets';
-
-type StoryUser = {
-  id: string;
-  full_name?: string;
-  avatar_url?: string;
-  status?: string;
-};
+import type {
+  OwnActiveStory,
+  StoryProfile,
+  StorySelection,
+  VisibleStoryMetadata,
+} from './storyTypes';
 
 interface ProfileRecord {
   id: string;
@@ -33,6 +32,45 @@ interface ProfileRecord {
   height?: number;
   role?: string[];
   looking_for?: string[];
+}
+
+function isVisibleStoryMetadata(value: unknown): value is VisibleStoryMetadata {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.story_id === 'string'
+    && typeof row.owner_id === 'string'
+    && typeof row.created_at === 'string'
+    && typeof row.expires_at === 'string'
+    && typeof row.viewed_by_caller === 'boolean';
+}
+
+function isOwnActiveStory(value: unknown): value is OwnActiveStory {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.story_id === 'string'
+    && typeof row.media_data === 'string'
+    && typeof row.media_type === 'string'
+    && typeof row.created_at === 'string'
+    && typeof row.expires_at === 'string';
+}
+
+function hasAcceptedStoryDataUrl(value: string): boolean {
+  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$/.exec(value);
+  if (!match) return false;
+  const payload = value.slice(value.indexOf(',') + 1);
+  return new TextEncoder().encode(payload).byteLength <= 2097152;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('無法讀取圖片檔案。'));
+    };
+    reader.onerror = () => reject(new Error('無法讀取圖片檔案。'));
+    reader.readAsDataURL(file);
+  });
 }
 
 interface NearbyUser {
@@ -123,7 +161,7 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
 export default function ExploreTab() {
   const { user: authUser } = useAuth();
   const { blockedUsers, blockListStatus } = useApp();
-  const [viewingStory, setViewingStory] = useState<StoryUser | null>(null);
+  const [viewingStory, setViewingStory] = useState<StorySelection | null>(null);
   const [activeTribe, setActiveTribe] = useState<TribeType>('all');
 
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
@@ -132,6 +170,14 @@ export default function ExploreTab() {
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'vip'>('all');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<ProfileRecord | null>(null);
+  const [visibleStories, setVisibleStories] = useState<VisibleStoryMetadata[]>([]);
+  const [ownStory, setOwnStory] = useState<OwnActiveStory | null>(null);
+  const [storyProfileOverrides, setStoryProfileOverrides] = useState<ProfileRecord[]>([]);
+  const [isStoryListLoading, setIsStoryListLoading] = useState(false);
+  const [isOwnStoryLoading, setIsOwnStoryLoading] = useState(false);
+  const [isCreatingStory, setIsCreatingStory] = useState(false);
+  const [storyError, setStoryError] = useState<string | null>(null);
+  const [storyNotice, setStoryNotice] = useState<string | null>(null);
 
   const fetchRealProfiles = React.useCallback(async () => {
     setIsLoading(true);
@@ -157,6 +203,121 @@ export default function ExploreTab() {
     }
   }, [authUser]);
 
+  const loadOwnStory = React.useCallback(async () => {
+    if (!authUser?.id) {
+      setOwnStory(null);
+      setIsOwnStoryLoading(false);
+      return;
+    }
+
+    setIsOwnStoryLoading(true);
+    const { data, error } = await supabase.rpc('get_own_active_story');
+    if (error) {
+      console.error('無法載入我的限時動態:', error);
+      setOwnStory(null);
+      setStoryError('目前無法載入我的限時動態，請稍後再試。');
+      setIsOwnStoryLoading(false);
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : null;
+    setOwnStory(isOwnActiveStory(row) ? row : null);
+    setIsOwnStoryLoading(false);
+  }, [authUser?.id]);
+
+  const loadVisibleStories = React.useCallback(async () => {
+    if (!authUser?.id || blockListStatus !== 'ready') {
+      setVisibleStories([]);
+      setIsStoryListLoading(false);
+      return;
+    }
+
+    setIsStoryListLoading(true);
+    const { data, error } = await supabase.rpc('list_visible_stories');
+    if (error) {
+      console.error('無法載入限時動態清單:', error);
+      setVisibleStories([]);
+      setStoryError('目前無法載入限時動態，請稍後再試。');
+      setIsStoryListLoading(false);
+      return;
+    }
+
+    setVisibleStories(Array.isArray(data) ? data.filter(isVisibleStoryMetadata) : []);
+    setIsStoryListLoading(false);
+  }, [authUser?.id, blockListStatus]);
+
+  const refreshStories = React.useCallback(async () => {
+    await Promise.all([loadOwnStory(), loadVisibleStories()]);
+  }, [loadOwnStory, loadVisibleStories]);
+
+  const handleCreateStory = React.useCallback(async (file: File) => {
+    if (!authUser?.id) {
+      setStoryError('請先登入後再新增限時動態。');
+      return;
+    }
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setStoryError('限時動態僅支援 JPEG、PNG 或 WebP 圖片。');
+      return;
+    }
+
+    setIsCreatingStory(true);
+    setStoryError(null);
+    setStoryNotice(null);
+
+    try {
+      const mediaData = await fileToDataUrl(file);
+      if (!hasAcceptedStoryDataUrl(mediaData)) {
+        throw new Error('圖片格式不符或編碼後大小超過限時動態上限。');
+      }
+
+      const { error } = await supabase.rpc('create_own_story', {
+        p_media_data: mediaData,
+        p_media_type: 'image',
+      });
+
+      if (error) throw error;
+
+      await refreshStories();
+      setStoryNotice('限時動態已發布。');
+    } catch (error) {
+      console.error('新增限時動態失敗:', error);
+      setStoryError(error instanceof Error ? error.message : '無法新增限時動態，請稍後再試。');
+    } finally {
+      setIsCreatingStory(false);
+    }
+  }, [authUser?.id, refreshStories]);
+
+  const handleDeleteOwnStory = React.useCallback(async (storyId: string): Promise<boolean> => {
+    setStoryError(null);
+    setStoryNotice(null);
+
+    const { data, error } = await supabase.rpc('delete_own_story', {
+      p_story_id: storyId,
+    });
+
+    if (error || data !== true) {
+      if (error) console.error('刪除限時動態失敗:', error);
+      setStoryError('無法刪除限時動態，請稍後再試。');
+      return false;
+    }
+
+    await refreshStories();
+    setStoryNotice('限時動態已刪除。');
+    return true;
+  }, [refreshStories]);
+
+  const handleStoryViewed = React.useCallback((storyId: string) => {
+    setVisibleStories((current) => current.map((story) => (
+      story.story_id === storyId ? { ...story, viewed_by_caller: true } : story
+    )));
+  }, []);
+
+  const handleStoryUnavailable = React.useCallback((storyId: string) => {
+    setVisibleStories((current) => current.filter((story) => story.story_id !== storyId));
+    void loadVisibleStories();
+  }, [loadVisibleStories]);
+
   useEffect(() => {
     if (authUser) {
       fetchRealProfiles();
@@ -166,6 +327,18 @@ export default function ExploreTab() {
       setIsLoading(false);
     }
   }, [authUser, fetchRealProfiles]);
+
+  useEffect(() => {
+    setStoryError(null);
+    setStoryNotice(null);
+    void refreshStories();
+  }, [refreshStories]);
+
+  useEffect(() => {
+    if (blockListStatus === 'ready') {
+      void loadVisibleStories();
+    }
+  }, [blockListStatus, blockedUsers, loadVisibleStories]);
 
   useEffect(() => {
     const handleProfileUpdated = () => {
@@ -180,6 +353,46 @@ export default function ExploreTab() {
     if (blockListStatus !== 'ready') return [];
     return profiles.filter((profile) => !blockedUsers.has(profile.id));
   }, [blockListStatus, blockedUsers, profiles]);
+
+  const storyProfilesById = useMemo(() => {
+    const profileMap = new Map<string, StoryProfile>();
+    for (const profile of [...profiles, ...storyProfileOverrides]) {
+      profileMap.set(profile.id, profile);
+    }
+    return profileMap;
+  }, [profiles, storyProfileOverrides]);
+
+  useEffect(() => {
+    const missingProfileIds = visibleStories
+      .map((story) => story.owner_id)
+      .filter((ownerId) => !storyProfilesById.has(ownerId));
+
+    if (missingProfileIds.length === 0) return;
+
+    let active = true;
+    const loadMissingStoryProfiles = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, age, avatar_url, public_photos, location, is_vip, status, bio, tribe, height, role, looking_for')
+        .in('id', [...new Set(missingProfileIds)]);
+
+      if (!active) return;
+      if (error) {
+        console.error('無法載入限時動態的公開個人檔案:', error);
+        return;
+      }
+
+      const resolved = normalizeProfiles(Array.isArray(data) ? data : []);
+      setStoryProfileOverrides((current) => {
+        const next = new Map(current.map((profile) => [profile.id, profile]));
+        for (const profile of resolved) next.set(profile.id, profile);
+        return [...next.values()];
+      });
+    };
+
+    void loadMissingStoryProfiles();
+    return () => { active = false; };
+  }, [storyProfilesById, visibleStories]);
 
   const visibleProfileIds = useMemo(() => visibleProfiles.map((profile) => profile.id), [visibleProfiles]);
   const distanceBucketsByProfileId = useProfileDistanceBuckets(visibleProfileIds);
@@ -438,7 +651,29 @@ export default function ExploreTab() {
         )}
       </section>
 
-      <StoriesBar onViewStory={setViewingStory} profiles={visibleProfiles} myProfile={myProfile} />
+      <StoriesBar
+        ownProfile={myProfile}
+        ownStory={ownStory}
+        visibleStories={visibleStories}
+        profilesById={storyProfilesById}
+        isLoading={isStoryListLoading || isOwnStoryLoading}
+        errorMessage={storyError}
+        notice={storyNotice}
+        isCreating={isCreatingStory}
+        onCreate={handleCreateStory}
+        onOpenOwn={() => {
+          if (ownStory) {
+            setViewingStory({ kind: 'own', story: ownStory, profile: myProfile });
+          }
+        }}
+        onOpenVisible={(story) => {
+          setViewingStory({
+            kind: 'visible',
+            story,
+            profile: storyProfilesById.get(story.owner_id) ?? null,
+          });
+        }}
+      />
       <TribeFilters active={activeTribe} onChange={setActiveTribe} />
       <ExploreGrid
         activeTribe={activeTribe}
@@ -452,7 +687,13 @@ export default function ExploreTab() {
       )}
 
       {viewingStory && (
-        <StoryViewer user={viewingStory} onClose={() => setViewingStory(null)} />
+        <StoryViewer
+          selection={viewingStory}
+          onClose={() => setViewingStory(null)}
+          onViewed={handleStoryViewed}
+          onUnavailable={handleStoryUnavailable}
+          onDeleteOwn={handleDeleteOwnStory}
+        />
       )}
     </div>
   );

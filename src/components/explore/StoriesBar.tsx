@@ -1,120 +1,155 @@
-import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import React, { useRef } from 'react';
+import { Loader2, Plus } from 'lucide-react';
 import { getPublicProfilePhoto } from '@/utils/profile';
-// 移除了 STORY_USERS 的假資料依賴
-
-// ✅ 1. 擴充 Props，接收來自 ExploreTab 的真實資料
-interface StoryProfile {
-  id: string;
-  full_name?: string;
-  avatar_url?: string;
-  public_photos?: string[];
-  hasStory?: boolean;
-}
+import type { OwnActiveStory, StoryProfile, VisibleStoryMetadata } from './storyTypes';
 
 interface Props {
-  onViewStory: (user: StoryProfile) => void;
-  profiles: StoryProfile[];
-  myProfile: StoryProfile | null;
+  ownProfile: StoryProfile | null;
+  ownStory: OwnActiveStory | null;
+  visibleStories: VisibleStoryMetadata[];
+  profilesById: Map<string, StoryProfile>;
+  isLoading: boolean;
+  errorMessage: string | null;
+  notice: string | null;
+  isCreating: boolean;
+  onCreate: (file: File) => Promise<void>;
+  onOpenOwn: () => void;
+  onOpenVisible: (story: VisibleStoryMetadata) => void;
 }
 
-export default function StoriesBar({ onViewStory, profiles, myProfile }: Props) {
-  const [viewedStories, setViewedStories] = useState<Set<string>>(new Set());
-  const myPrimaryPhoto = getPublicProfilePhoto(myProfile?.public_photos, myProfile?.avatar_url);
+const gradients = [
+  'from-blue-600 to-violet-600',
+  'from-orange-500 to-red-600',
+  'from-emerald-500 to-teal-700',
+  'from-pink-500 to-rose-600',
+];
 
-  function handleView(user: StoryProfile) {
-    setViewedStories(prev => new Set([...prev, user.id]));
-    onViewStory(user);
+function initials(name: string): string {
+  return name ? name.slice(0, 2).toUpperCase() : '??';
+}
+
+function profileGradient(id: string): string {
+  return gradients[(id.charCodeAt(0) || 0) % gradients.length];
+}
+
+export default function StoriesBar({
+  ownProfile,
+  ownStory,
+  visibleStories,
+  profilesById,
+  isLoading,
+  errorMessage,
+  notice,
+  isCreating,
+  onCreate,
+  onOpenOwn,
+  onOpenVisible,
+}: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const ownPhoto = getPublicProfilePhoto(ownProfile?.public_photos, ownProfile?.avatar_url);
+
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    await onCreate(file);
   }
 
-  // ✅ 2. 動態運算缺乏頭像時的替代視覺
-  const getGradient = (index: number) => {
-    const gradients = [
-      'from-blue-600 to-violet-600',
-      'from-orange-500 to-red-600',
-      'from-emerald-500 to-teal-700',
-      'from-pink-500 to-rose-600'
-    ];
-    return gradients[index % gradients.length];
-  };
-
-  const getInitials = (name?: string) => {
-    return name ? name.substring(0, 2).toUpperCase() : '??';
-  };
-
   return (
-    <div className="px-3 pt-4 pb-2">
-      <div className="flex items-center gap-3 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
-        
-        {/* ========================================== */}
-        {/* 自己的限時動態 (讀取真實 myProfile) */}
-        {/* ========================================== */}
-        <div className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group">
+    <section className="px-3 pt-4 pb-2" aria-label="限時動態">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      <div className="flex items-center gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button
+          type="button"
+          disabled={isCreating}
+          onClick={() => {
+            if (ownStory) onOpenOwn();
+            else fileInputRef.current?.click();
+          }}
+          className="group flex flex-shrink-0 flex-col items-center gap-1.5 disabled:cursor-wait"
+        >
           <div className="relative">
-            <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-dashed border-white/20 group-hover:border-violet-500/60 transition-all flex items-center justify-center overflow-hidden">
-              {myPrimaryPhoto ? (
-                <img src={myPrimaryPhoto} alt="Me" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center">
-                  <span className="text-white/50 text-lg font-bold">我</span>
-                </div>
-              )}
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-gradient-to-br from-violet-500 to-blue-500 rounded-full border-2 border-slate-950 flex items-center justify-center">
-              <Plus className="w-3 h-3 text-white" strokeWidth={3} />
-            </div>
-          </div>
-          <span className="text-white/50 text-[10px] font-medium">我的動態</span>
-        </div>
-
-        {/* ========================================== */}
-        {/* 其他使用者的限時動態 (讀取真實 profiles，最多取前 15 筆避免過載) */}
-        {/* ========================================== */}
-        {profiles.filter(profile => profile.hasStory).slice(0, 15).map((user, index) => {
-          const isViewed = viewedStories.has(user.id);
-          
-          return (
-            <div
-              key={user.id}
-              onClick={() => handleView(user)}
-              className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer group"
-            >
-              <div className="relative p-0.5 rounded-full" style={{
-                background: isViewed
-                  ? 'rgba(255,255,255,0.08)'
-                  : 'linear-gradient(135deg, #7c3aed, #3b82f6, #22d3ee)',
-                padding: isViewed ? '2px' : '2.5px',
-              }}>
-                <div className="w-14 h-14 rounded-full flex items-center justify-center border-2 border-slate-950 transition-all group-hover:scale-105 overflow-hidden bg-slate-800">
-                  
-                  {/* 若有真實頭像則顯示，否則顯示漸層與縮寫 */}
-                  {getPublicProfilePhoto(user.public_photos, user.avatar_url) ? (
-                    <img src={getPublicProfilePhoto(user.public_photos, user.avatar_url)} alt={user.full_name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className={`w-full h-full bg-gradient-to-br ${getGradient(index)} flex items-center justify-center`}>
-                      <span className="text-white font-bold text-sm">
-                        {getInitials(user.full_name)}
-                      </span>
-                    </div>
-                  )}
-
-                </div>
-                
-                {/* 未讀時的呼吸燈特效 */}
-                {!isViewed && (
-                  <div className="absolute inset-0 rounded-full animate-ping opacity-20"
-                    style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6, #22d3ee)' }} />
+            <div className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 transition-all ${
+              ownStory
+                ? 'border-violet-400/80 p-0.5'
+                : 'border-dashed border-white/20 group-hover:border-violet-500/60'
+            }`}>
+              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-slate-800">
+                {ownPhoto ? (
+                  <img src={ownPhoto} alt="我的個人檔案" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-lg font-bold text-white/50">我</span>
                 )}
               </div>
-              
-              {/* 取名字的第一個單字以防過長 */}
-              <span className={`text-[10px] font-medium truncate max-w-[56px] ${isViewed ? 'text-white/30' : 'text-white/70'}`}>
-                {user.full_name?.split(' ')[0] || '尚未設定名稱'}
-              </span>
             </div>
+            <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-slate-950 bg-gradient-to-br from-violet-500 to-blue-500">
+              {isCreating ? <Loader2 className="h-3 w-3 animate-spin text-white" /> : <Plus className="h-3 w-3 text-white" strokeWidth={3} />}
+            </div>
+          </div>
+          <span className="max-w-[64px] truncate text-[10px] font-medium text-white/60">
+            {ownStory ? '我的動態' : '新增動態'}
+          </span>
+        </button>
+
+        {visibleStories.map((story) => {
+          const profile = profilesById.get(story.owner_id);
+          const photo = getPublicProfilePhoto(profile?.public_photos, profile?.avatar_url);
+          const viewed = story.viewed_by_caller;
+          const displayName = profile?.full_name || '尚未設定名稱';
+
+          return (
+            <button
+              key={story.story_id}
+              type="button"
+              onClick={() => onOpenVisible(story)}
+              className="group flex flex-shrink-0 flex-col items-center gap-1.5"
+            >
+              <div
+                className="relative rounded-full p-0.5"
+                style={{
+                  background: viewed
+                    ? 'rgba(255,255,255,0.08)'
+                    : 'linear-gradient(135deg, #7c3aed, #3b82f6, #22d3ee)',
+                  padding: viewed ? '2px' : '2.5px',
+                }}
+              >
+                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 border-slate-950 bg-slate-800 transition-all group-hover:scale-105">
+                  {photo ? (
+                    <img src={photo} alt={displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${profileGradient(story.owner_id)}`}>
+                      <span className="text-sm font-bold text-white">{initials(displayName)}</span>
+                    </div>
+                  )}
+                </div>
+                {!viewed && (
+                  <div
+                    className="absolute inset-0 animate-ping rounded-full opacity-20"
+                    style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6, #22d3ee)' }}
+                  />
+                )}
+              </div>
+              <span className={`max-w-[56px] truncate text-[10px] font-medium ${viewed ? 'text-white/30' : 'text-white/70'}`}>
+                {displayName}
+              </span>
+            </button>
           );
         })}
       </div>
-    </div>
+
+      {isLoading && <p className="mt-2 text-center text-xs text-white/40">正在載入限時動態…</p>}
+      {errorMessage && <p className="mt-2 text-center text-xs text-rose-300">{errorMessage}</p>}
+      {notice && <p className="mt-2 text-center text-xs text-emerald-300">{notice}</p>}
+      {!isLoading && !errorMessage && visibleStories.length === 0 && (
+        <p className="mt-2 text-center text-xs text-white/35">目前沒有可觀看的限時動態。</p>
+      )}
+    </section>
   );
 }
