@@ -3,6 +3,7 @@ import { Home, Compass, MessageCircle, Bell, User, Ghost } from 'lucide-react';
 import { Tab, Conversation } from '@/types';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext'; 
+import { useLanguage } from '@/context/LanguageContext';
 
 import HomeFeed from '@/components/home/HomeFeed';
 import ExploreTab from '@/components/explore/ExploreTab';
@@ -21,6 +22,7 @@ type NotificationReadState = {
 export default function MainApp() {
   const { stealthMode, unreadChat, setUnreadChat, showPaywall, dismissPaywall, blockedUsers, blockListStatus } = useApp();
   const { user: currentUser } = useAuth(); 
+  const { t } = useLanguage();
   
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [activeChatConvo, setActiveChatConvo] = useState<Conversation | null>(null);
@@ -136,11 +138,11 @@ export default function MainApp() {
   }, [currentUser?.id]);
 
   const tabs = [
-    { id: 'home' as Tab, icon: Home, label: '首頁' },
-    { id: 'explore' as Tab, icon: Compass, label: '探索' },
-    { id: 'chat' as Tab, icon: MessageCircle, label: '聊天', badge: unreadChat },
-    { id: 'inbox' as Tab, icon: Bell, label: '通知', badge: unreadNotifications },
-    { id: 'profile' as Tab, icon: User, label: '個人' },
+    { id: 'home' as Tab, icon: Home, label: t('nav.home', '首頁') },
+    { id: 'explore' as Tab, icon: Compass, label: t('nav.explore', '探索') },
+    { id: 'chat' as Tab, icon: MessageCircle, label: t('nav.chat', '聊天'), badge: unreadChat },
+    { id: 'inbox' as Tab, icon: Bell, label: t('nav.notifications', '通知'), badge: unreadNotifications },
+    { id: 'profile' as Tab, icon: User, label: t('nav.profile', '個人') },
   ];
 
   return (

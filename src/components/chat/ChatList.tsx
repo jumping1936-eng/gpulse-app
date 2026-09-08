@@ -4,6 +4,7 @@ import { Conversation, DBProfile } from '@/types';
 import { supabase } from '@/supabaseClient';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Props {
   onOpenConvo: (c: Conversation) => void;
@@ -39,6 +40,7 @@ const formatPreview = (message: PreviewMessage): string => {
 };
 
 export default function ChatList({ onOpenConvo }: Props) {
+  const { locale, t } = useLanguage();
   const { setUnreadChat, blockedUsers } = useApp();
   const { user: currentUser } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -54,7 +56,7 @@ export default function ChatList({ onOpenConvo }: Props) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return null;
 
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   };
 
   const fetchConversations = useCallback(async () => {
@@ -205,7 +207,7 @@ export default function ChatList({ onOpenConvo }: Props) {
 
   const recentMatches = conversations.slice(0, 8).map((convo) => ({
     id: convo.id,
-    name: convo.other_user?.full_name || '尚未設定名稱',
+    name: convo.other_user?.full_name || t('common.unknownName', '尚未設定名稱'),
     avatar: convo.other_user?.avatar_url || '',
   }));
 
@@ -223,7 +225,7 @@ export default function ChatList({ onOpenConvo }: Props) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-violet-400/80">messages</p>
-            <h1 className="text-white font-bold text-2xl tracking-wide mt-1">訊息</h1>
+            <h1 className="text-white font-bold text-2xl tracking-wide mt-1">{t('chat.title', '訊息')}</h1>
           </div>
           <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-violet-300">
             <Sparkles className="w-4 h-4" />
@@ -233,8 +235,8 @@ export default function ChatList({ onOpenConvo }: Props) {
 
       <div className="px-5 py-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-white font-semibold text-base">近期配對</h2>
-          <span className="text-white/40 text-xs">Recent Matches</span>
+          <h2 className="text-white font-semibold text-base">{t('chat.recentMatches', '近期配對')}</h2>
+          <span className="text-white/40 text-xs">{t('chat.recentMatches', '近期配對')}</span>
         </div>
 
         <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -258,7 +260,7 @@ export default function ChatList({ onOpenConvo }: Props) {
       <div className="px-3 pb-3">
         <div className="rounded-3xl border border-white/8 bg-white/3 backdrop-blur-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-            <h2 className="text-white font-semibold text-base">歷史對話</h2>
+            <h2 className="text-white font-semibold text-base">{t('chat.history', '歷史對話')}</h2>
             <span className="text-violet-300 text-[10px] uppercase tracking-[0.2em]">chat</span>
           </div>
 
@@ -293,7 +295,7 @@ export default function ChatList({ onOpenConvo }: Props) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span className="font-semibold text-white text-base truncate">
-                        {convo.other_user?.full_name || '尚未設定名稱'}
+                        {convo.other_user?.full_name || t('common.unknownName', '尚未設定名稱')}
                       </span>
                       {formatMessageTime(convo.last_message_time) && <span className="text-white/35 text-[11px] flex-shrink-0">
                         {formatMessageTime(convo.last_message_time)}
@@ -302,7 +304,7 @@ export default function ChatList({ onOpenConvo }: Props) {
 
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm text-white/55 truncate flex-1">
-                        {convo.last_message || '尚無新訊息'}
+                        {convo.last_message || t('chat.empty', '尚無新訊息')}
                       </p>
                       {unreadCount > 0 && (
                         <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500/90 text-[10px] font-bold text-white px-1">
@@ -323,7 +325,7 @@ export default function ChatList({ onOpenConvo }: Props) {
           <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center border border-white/8 backdrop-blur-xl">
             <MessageCircle className="w-10 h-10 text-white/20" />
           </div>
-          <p className="text-white/40 text-sm font-medium">去探索頁面認識新朋友吧！</p>
+          <p className="text-white/40 text-sm font-medium">{t('chat.emptyHint', '去探索頁面認識新朋友吧！')}</p>
         </div>
       )}
     </div>

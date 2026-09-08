@@ -4,6 +4,7 @@ import { supabase } from '@/supabaseClient';
 import ProfileModal from '@/components/explore/ProfileModal';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { getPublicProfilePhoto, isValidProfileName, PUBLIC_PROFILE_FIELDS } from '@/utils/profile';
 import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
 import { DistanceBucket, useProfileDistanceBuckets } from '@/hooks/useProfileDistanceBuckets';
@@ -112,6 +113,7 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
 export default function HomeFeed() {
   const { blockedUsers, blockListStatus } = useApp();
   const { user: currentUser } = useAuth();
+  const { t } = useLanguage();
   const [users, setUsers] = useState<ProfileRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -362,22 +364,22 @@ export default function HomeFeed() {
         {!isLoading && !fetchError && blockListStatus === 'ready' && visibleUsers.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-white/40">
             <Sparkles className="w-12 h-12 text-violet-400/40" />
-            <p className="text-sm font-medium">目前還沒有其他使用者</p>
-            <p className="text-xs text-white/25">邀請朋友加入，或稍後再回來看看</p>
+            <p className="text-sm font-medium">{t('home.noUsers', '目前還沒有其他使用者')}</p>
+            <p className="text-xs text-white/25">{t('home.emptyHint', '邀請朋友加入，或稍後再回來看看')}</p>
           </div>
         )}
 
         {!isLoading && !fetchError && blockListStatus === 'loading' && (
           <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/40">
             <Sparkles className="w-8 h-8 text-violet-400/40 animate-pulse" />
-            <p className="text-sm">正在確認封鎖名單…</p>
+            <p className="text-sm">{t('home.blockLoading', '正在確認封鎖名單…')}</p>
           </div>
         )}
 
         {!isLoading && !fetchError && (blockListStatus === 'error' || blockListStatus === 'unauthenticated') && (
           <div className="flex flex-col items-center justify-center py-10 gap-2 text-rose-200/80">
             <Sparkles className="w-8 h-8 text-rose-400/50" />
-            <p className="text-sm">目前無法安全載入探索名單，請稍後再試。</p>
+            <p className="text-sm">{t('home.blockUnavailable', '目前無法安全載入探索名單，請稍後再試。')}</p>
           </div>
         )}
 
@@ -391,7 +393,7 @@ export default function HomeFeed() {
               type="button"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-xl transition hover:bg-white/10"
-              aria-label="回到頁首"
+              aria-label={t('common.backToTop', '回到頁首')}
             >
               <Sparkles className="h-4 w-4" />
             </button>
@@ -399,7 +401,7 @@ export default function HomeFeed() {
               type="button"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg shadow-violet-500/25"
-              aria-label="回到頁首"
+              aria-label={t('common.backToTop', '回到頁首')}
             >
               <ArrowUpRight className="h-4 w-4" />
             </button>
@@ -410,14 +412,14 @@ export default function HomeFeed() {
           <div className="mb-3 flex items-center justify-between">
             <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Discover</p>
-            <h2 className="text-lg font-bold text-white">探索使用者</h2>
+            <h2 className="text-lg font-bold text-white">{t('home.discover', '探索使用者')}</h2>
             </div>
             <button
               type="button"
               onClick={() => setSelectedFilter('all')}
               className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-200"
             >
-              查看全部
+              {t('home.viewAll', '查看全部')}
               <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -461,7 +463,7 @@ export default function HomeFeed() {
                       )}
                       <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                         <div>
-                          <p className="text-base font-bold leading-none text-white">{isValidProfileName(user.name) ? user.name : '尚未設定名稱'}</p>
+                          <p className="text-base font-bold leading-none text-white">{isValidProfileName(user.name) ? user.name : t('common.unknownName', '尚未設定名稱')}</p>
                           {user.age && <p className="mt-1 text-[10px] text-white/80">{user.age}</p>}
                         </div>
                         {user.isOnline && <div className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-slate-950/60 px-1.5 py-1 text-[9px] text-emerald-300 backdrop-blur-xl">
@@ -492,21 +494,21 @@ export default function HomeFeed() {
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-300/80">For You</p>
-              <h2 className="text-lg font-bold text-white">系統最新推薦</h2>
+              <h2 className="text-lg font-bold text-white">{t('home.latest', '系統最新推薦')}</h2>
             </div>
             <button
               type="button"
               onClick={() => setSelectedFilter('vip')}
               className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-orange-500/20"
             >
-              今日精選
+              {t('home.featured', '今日精選')}
             </button>
           </div>
 
           <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {[
-              { id: 'all', label: '全部' },
-              { id: 'vip', label: 'VIP' },
+              { id: 'all', label: t('home.all', '全部') },
+              { id: 'vip', label: t('home.vip', 'VIP') },
             ].map((filter) => (
               <button
                 key={filter.id}
@@ -528,7 +530,7 @@ export default function HomeFeed() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/70">Selected</p>
-                  <p className="mt-1 text-sm font-bold text-white">正在關注 {selectedUser.name}</p>
+                  <p className="mt-1 text-sm font-bold text-white">{t('home.selected', '正在關注')} {selectedUser.name}</p>
                 </div>
               </div>
             </div>
@@ -586,7 +588,7 @@ export default function HomeFeed() {
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <h3 className="text-base font-bold text-white">{isValidProfileName(item.name) ? item.name : '尚未設定名稱'}{item.age ? `, ${item.age}` : ''}</h3>
+                            <h3 className="text-base font-bold text-white">{isValidProfileName(item.name) ? item.name : t('common.unknownName', '尚未設定名稱')}{item.age ? `, ${item.age}` : ''}</h3>
                             {item.isVIP && <Crown className="h-3.5 w-3.5 text-amber-400" />}
                           </div>
                           {item.location && <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">

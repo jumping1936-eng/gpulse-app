@@ -3,6 +3,7 @@ import { ArrowLeft, UserX, Unlock, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/supabaseClient';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface BlockedUser {
   id: string;
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function BlockedUsersList({ onBack }: Props) {
+  const { locale, t } = useLanguage();
   const { user } = useAuth();
   const { unblockUser } = useApp();
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
@@ -55,7 +57,7 @@ export default function BlockedUsersList({ onBack }: Props) {
 
         const nextBlockedUsers = (blockRows ?? []).map((row) => {
           const profile = profileMap.get(row.blocked_id);
-          const name = profile?.full_name || '未知使用者';
+          const name = profile?.full_name || t('common.unknownName', '尚未設定名稱');
           const initials = name.split(' ').map((part: string) => part[0]).join('').slice(0, 2).toUpperCase() || '??';
           return {
             id: row.id,
@@ -63,7 +65,7 @@ export default function BlockedUsersList({ onBack }: Props) {
             name,
             initials,
             gradient: 'from-orange-400 to-red-500',
-            date: row.created_at ? new Date(row.created_at).toLocaleDateString('zh-TW') : '未知日期',
+            date: row.created_at ? new Date(row.created_at).toLocaleDateString(locale) : t('common.loading', '載入中…'),
             avatar: profile?.avatar_url,
           } satisfies BlockedUser;
         });
@@ -79,7 +81,7 @@ export default function BlockedUsersList({ onBack }: Props) {
     };
 
     loadBlockedUsers();
-  }, [user?.id]);
+  }, [locale, t, user?.id]);
 
   const handleUnblock = async (userId: string) => {
     if (!user?.id) return;
@@ -104,7 +106,7 @@ export default function BlockedUsersList({ onBack }: Props) {
         >
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <h1 className="text-white font-bold text-lg flex-1">封鎖名單管理</h1>
+        <h1 className="text-white font-bold text-lg flex-1">{t('block.title', '封鎖名單管理')}</h1>
       </div>
 
       {/* 警告提示區塊 */}
@@ -120,7 +122,7 @@ export default function BlockedUsersList({ onBack }: Props) {
       {/* 名單列表區塊 */}
       <div className="flex-1 overflow-y-auto px-5 pb-6">
         {isLoading ? (
-          <div className="flex items-center justify-center h-full py-12 text-sm text-slate-400">載入中...</div>
+          <div className="flex items-center justify-center h-full py-12 text-sm text-slate-400">{t('common.loading', '載入中…')}</div>
         ) : blockedUsers.length > 0 ? (
           <div className="space-y-3">
             {blockedUsers.map((user) => (
@@ -146,7 +148,7 @@ export default function BlockedUsersList({ onBack }: Props) {
                   className="bg-white/10 hover:bg-white/20 active:bg-white/30 text-white text-xs font-medium px-4 py-2 rounded-full transition-colors flex items-center gap-1.5"
                 >
                   <Unlock className="w-3.5 h-3.5" />
-                  解除封鎖
+                  {t('block.unblock', '解除封鎖')}
                 </button>
               </div>
             ))}
@@ -157,8 +159,8 @@ export default function BlockedUsersList({ onBack }: Props) {
             <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4">
               <UserX className="w-10 h-10 text-white/40" />
             </div>
-            <p className="text-white font-medium mb-1">目前沒有封鎖任何人</p>
-            <p className="text-white/50 text-xs">您封鎖的使用者將會顯示在這裡</p>
+            <p className="text-white font-medium mb-1">{t('block.empty', '目前沒有封鎖任何人')}</p>
+            <p className="text-white/50 text-xs">{t('block.emptyHint', '您封鎖的使用者將會顯示在這裡')}</p>
           </div>
         )}
       </div>

@@ -3,14 +3,8 @@ import { Activity, Mail, Loader2, X, MailCheck, KeyRound } from 'lucide-react';
 // ⚠️ 確保這裡的路徑與您的專案相符
 import { getLoginCopy } from '../i18n/loginTranslations';
 import { supabase } from '../supabaseClient'; 
+import { useLanguage } from '@/context/LanguageContext';
 
-const LANGUAGES = [
-  { code: 'zh', label: '繁體中文', flag: '🇹🇼' },
-  { code: 'en', label: 'English', flag: '🇺🇸' },
-  { code: 'ja', label: '日本語', flag: '🇯🇵' },
-  { code: 'ko', label: '한국어', flag: '🇰🇷' },
-  { code: 'th', label: 'ภาษาไทย', flag: '🇹🇭' },
-];
 
 interface Props {
   onLogin: () => void;
@@ -24,7 +18,7 @@ export default function LoginScreen({
   onPasswordRecoveryComplete,
 }: Props) {
   // === 狀態管理 (保留您原有的所有狀態) ===
-  const [lang] = useState(LANGUAGES[0]);
+  const { locale } = useLanguage();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -238,7 +232,7 @@ export default function LoginScreen({
     setForgotSuccess(false);
   }
 
-  const t = getLoginCopy(lang.code);
+  const t = getLoginCopy(locale);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col relative z-50 overflow-visible">

@@ -1,5 +1,6 @@
 import React from 'react';
 import { TribeType } from '@/types';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Props {
   active: TribeType;
@@ -8,15 +9,16 @@ interface Props {
 
 // ✅ 靜態配置：定義族群篩選器資料 (放置於元件外部，優化記憶體效能)
 const TRIBES = [
-  { id: 'all', label: '全部', icon: '' },
-  { id: 'bear', label: '熊族', icon: '🐻' },
-  { id: 'wolf', label: '狼族', icon: '🐺' },
-  { id: 'otter', label: '水獺', icon: '🦦' },
-  { id: 'youth', label: '少年', icon: '✨' },
-  { id: 'gym', label: '巨巨', icon: '💪' },
+  { id: 'all', key: 'home.all', fallback: '全部', icon: '' },
+  { id: 'bear', key: 'tribe.bear', fallback: '熊族', icon: '🐻' },
+  { id: 'wolf', key: 'tribe.wolf', fallback: '狼族', icon: '🐺' },
+  { id: 'otter', key: 'tribe.otter', fallback: '水獺', icon: '🦦' },
+  { id: 'youth', key: 'tribe.youth', fallback: '少年', icon: '✨' },
+  { id: 'gym', key: 'tribe.gym', fallback: '巨巨', icon: '💪' },
 ] as const; // 使用 as const 鎖定結構，提升 TS 嚴謹度
 
 export default function TribeFilters({ active, onChange }: Props) {
+  const { t } = useLanguage();
   return (
     <div className="px-3 pb-3">
       {/* 水平滑動容器：隱藏滾動條但保持可滑動 */}
@@ -39,7 +41,7 @@ export default function TribeFilters({ active, onChange }: Props) {
               }`}
             >
               {tribe.icon && <span>{tribe.icon}</span>}
-              <span className="text-sm font-bold">{tribe.label}</span>
+              <span className="text-sm font-bold">{t(tribe.key, tribe.fallback)}</span>
             </button>
           );
         })}

@@ -94,6 +94,11 @@ const profileViewSource = fs.readFileSync(profileViewPath, 'utf8');
 const profileUtilitySource = fs.readFileSync(path.join(sourceRoot, 'utils', 'profile.ts'), 'utf8');
 const homeFeedSource = fs.readFileSync(path.join(sourceRoot, 'components', 'home', 'HomeFeed.tsx'), 'utf8');
 const exploreTabSource = fs.readFileSync(path.join(sourceRoot, 'components', 'explore', 'ExploreTab.tsx'), 'utf8');
+const chatRoomSource = fs.readFileSync(path.join(sourceRoot, 'components', 'chat', 'ChatRoom.tsx'), 'utf8');
+const languageContextSource = fs.readFileSync(path.join(sourceRoot, 'context', 'LanguageContext.tsx'), 'utf8');
+const appTranslationsSource = fs.readFileSync(path.join(sourceRoot, 'i18n', 'appTranslations.ts'), 'utf8');
+const loginScreenSource = fs.readFileSync(path.join(sourceRoot, 'components', 'LoginScreen.tsx'), 'utf8');
+const paywallModalSource = fs.readFileSync(path.join(sourceRoot, 'components', 'PaywallModal.tsx'), 'utf8');
 const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
   /useEffect\(\(\)\s*=>\s*\{([\s\S]*?)\},\s*\[[^\]]*\]\);/g,
 )].filter((match) => match[1].includes('navigator.geolocation.getCurrentPosition')).length;
@@ -104,8 +109,16 @@ checkTrue('own profile field contract exists', profileUtilitySource.includes('OW
 checkTrue('Home uses verified public profile contract', homeFeedSource.includes('.select(PUBLIC_PROFILE_FIELDS)'));
 checkTrue('Explore uses verified public profile contract', exploreTabSource.includes('.select(PUBLIC_PROFILE_FIELDS)'));
 checkTrue('Profile uses verified own profile contract', profileViewSource.includes('.select(OWN_PROFILE_FIELDS)'));
+checkTrue('Chat profile lookup uses verified public profile contract', chatRoomSource.includes('.select(PUBLIC_PROFILE_FIELDS)'));
 checkFalse('profile field contracts exclude unavailable columns', /['"](?:status|telegram|twitter|facebook|instagram)['"]/.test(profileUtilitySource));
 checkTrue('own profile distinguishes loading, missing, and error', /OwnProfileLoadStatus = 'loading' \| 'ready' \| 'missing' \| 'error'/.test(profileViewSource));
+checkTrue('language provider has one persisted preference key', languageContextSource.includes('LANGUAGE_PREFERENCE_KEY'));
+checkTrue('language provider exposes selection and translation APIs', languageContextSource.includes('setLocale') && languageContextSource.includes('t:'));
+checkTrue('language resources define the supported global locales', appTranslationsSource.includes("SUPPORTED_LOCALES = ['zh-TW', 'en']"));
+checkTrue('login reads the shared language context', loginScreenSource.includes('useLanguage()'));
+checkZero('login retains inactive local language state', [...loginScreenSource.matchAll(/useState\(LANGUAGES\[0\]\)/g)].length);
+checkTrue('profile settings presents a language selector', profileViewSource.includes("<select") && profileViewSource.includes('setLocale'));
+checkTrue('VIP dialog has Escape and backdrop dismissal', paywallModalSource.includes("event.key === 'Escape'") && paywallModalSource.includes('event.target === event.currentTarget'));
 checkTrue('secure Stories migration exists', storiesMigrationExists);
 checkGreaterOrEqual('Stories table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.stories/g)].length, 1);
 checkGreaterOrEqual('Story view table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.story_views/g)].length, 1);

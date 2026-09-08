@@ -9,6 +9,7 @@ import { Loader2, Activity } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { LanguageProvider } from '@/context/LanguageContext';
 
 // ==========================================
 // 核心業務邏輯元件 (確保被 AuthProvider 包覆)
@@ -108,10 +109,12 @@ function AppContent() {
 // ==========================================
 export default function App() {
   return (
-    <AuthProvider>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Mail, UserPlus, Lock, Loader2, Inbox, Sparkles } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 
 type NotificationSender = {
@@ -25,6 +26,7 @@ type NotificationsTabProps = {
 
 export default function NotificationsTab({ onUnreadCountChange }: NotificationsTabProps) {
   const { user } = useAuth();
+  const { locale, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'interaction' | 'system'>('interaction');
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,16 +134,16 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
   const formatTimeAgo = (dateString: string) => {
     const diff = Date.now() - new Date(dateString).getTime();
     const minutes = Math.floor(diff / 60000);
-    if (minutes < 60) return `${minutes || 1} 分鐘前`;
+    if (minutes < 60) return locale === 'en' ? `${minutes || 1}m ago` : `${minutes || 1} 分鐘前`;
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} 小時前`;
-    return `${Math.floor(hours / 24)} 天前`;
+    if (hours < 24) return locale === 'en' ? `${hours}h ago` : `${hours} 小時前`;
+    return locale === 'en' ? `${Math.floor(hours / 24)}d ago` : `${Math.floor(hours / 24)} 天前`;
   };
 
   return (
     <div className="h-full bg-slate-950 flex flex-col font-sans text-white relative">
       <div className="pt-5 pb-4 px-4 shrink-0 sticky top-0 bg-slate-950/95 backdrop-blur-xl border-b border-white/8 z-20">
-        <h1 className="text-2xl font-bold tracking-wider mb-5">通知</h1>
+        <h1 className="text-2xl font-bold tracking-wider mb-5">{t('notifications.title', '通知')}</h1>
         <div className="flex gap-3">
           <button
             onClick={() => setActiveTab('interaction')}
@@ -149,7 +151,7 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
               activeTab === 'interaction' ? 'bg-gradient-to-r from-pink-500 to-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)] border border-pink-400/50 text-white' : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
             }`}
           >
-            <Heart className={`w-4 h-4 ${activeTab === 'interaction' ? 'fill-current' : ''}`} /> 互動
+            <Heart className={`w-4 h-4 ${activeTab === 'interaction' ? 'fill-current' : ''}`} /> {t('notifications.interaction', '互動')}
           </button>
           <button
             onClick={() => setActiveTab('system')}
@@ -157,7 +159,7 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
               activeTab === 'system' ? 'bg-gradient-to-r from-indigo-500 to-purple-600 shadow-[0_0_20px_rgba(139,92,246,0.3)] border border-purple-300/50 text-white' : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
             }`}
           >
-            <Mail className="w-4 h-4" /> 系統
+            <Mail className="w-4 h-4" /> {t('notifications.system', '系統')}
           </button>
         </div>
       </div>
@@ -166,7 +168,7 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
         {readError && (
           <div className="mx-1 mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
             <span>{readError}</span>
-            <button onClick={() => void fetchNotifications()} className="shrink-0 rounded-full border border-amber-300/40 px-2.5 py-1 text-[11px] text-amber-100">重試</button>
+            <button onClick={() => void fetchNotifications()} className="shrink-0 rounded-full border border-amber-300/40 px-2.5 py-1 text-[11px] text-amber-100">{t('common.retry', '重試')}</button>
           </div>
         )}
         {activeTab === 'interaction' && (
@@ -174,39 +176,39 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
             {isLoading ? (
               <div className="flex flex-col items-center justify-center h-48 gap-3 text-slate-500">
                 <Loader2 className="w-6 h-6 animate-spin text-pink-500" />
-                <span className="text-sm">載入通知中...</span>
+                <span className="text-sm">{t('notifications.loading', '載入通知中…')}</span>
               </div>
             ) : errorMessage ? (
               <div className="flex flex-col items-center justify-center h-64 gap-4 text-rose-300 text-center px-6">
                 <Inbox className="w-12 h-12" />
                 <span className="text-sm">{errorMessage}</span>
-                <button onClick={() => void fetchNotifications()} className="rounded-full border border-rose-400/40 px-3 py-1.5 text-xs text-rose-200">重試</button>
+                <button onClick={() => void fetchNotifications()} className="rounded-full border border-rose-400/40 px-3 py-1.5 text-xs text-rose-200">{t('common.retry', '重試')}</button>
               </div>
             ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 gap-4 text-slate-500 opacity-60">
                 <Inbox className="w-12 h-12" />
-                <span className="text-sm">目前還沒有收到任何互動喔</span>
+                <span className="text-sm">{t('notifications.empty', '目前還沒有收到任何互動喔')}</span>
               </div>
             ) : (
               notifications.map((notif) => {
                 const sender = notif.sender || {};
                 const rawSenderName = sender.full_name ?? '';
-                const senderName = isValidProfileName(rawSenderName) ? rawSenderName : '尚未設定名稱';
+                const senderName = isValidProfileName(rawSenderName) ? rawSenderName : t('common.unknownName', '尚未設定名稱');
                 const senderPhoto = getPublicProfilePhoto(sender.public_photos, sender.avatar_url);
 
-                let message = '傳送了通知';
+                let message = t('notifications.default', '傳送了通知');
                 let IconComponent = Heart;
                 let iconColor = 'text-pink-500';
                 
-                if (notif.type === 'like') { message = '對你發送了心動！'; IconComponent = Heart; iconColor = 'text-pink-500'; }
-                else if (notif.type === 'album_request') { message = '申請查看你的私密相簿！'; IconComponent = Lock; iconColor = 'text-amber-400'; }
-                else if (notif.type === 'match') { message = '與你配對成功！'; IconComponent = UserPlus; iconColor = 'text-cyan-400'; }
+                if (notif.type === 'like') { message = t('notifications.like', '對你發送了心動！'); IconComponent = Heart; iconColor = 'text-pink-500'; }
+                else if (notif.type === 'album_request') { message = t('notifications.albumRequest', '申請查看你的私密相簿！'); IconComponent = Lock; iconColor = 'text-amber-400'; }
+                else if (notif.type === 'match') { message = t('notifications.match', '與你配對成功！'); IconComponent = UserPlus; iconColor = 'text-cyan-400'; }
 
                 return (
                   <div key={notif.id} className="flex items-center gap-4 py-4 border-b border-white/5 hover:bg-white/[0.02] cursor-pointer transition-colors group">
                     <div className={`relative w-12 h-12 rounded-full ${!senderPhoto ? `bg-gradient-to-br ${getGradient(sender.id)}` : 'bg-slate-800'} flex items-center justify-center shrink-0 overflow-hidden`}>
                       {senderPhoto ? (
-                         <img src={senderPhoto} alt={`${senderName} 的公開照片`} className="w-full h-full object-cover" />
+                         <img src={senderPhoto} alt={`${senderName} ${t('profile.title', '個人檔案')}`} className="w-full h-full object-cover" />
                       ) : (
                          <span className="text-white font-bold tracking-tighter">{getInitials(senderName)}</span>
                       )}
@@ -235,7 +237,7 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
                 <div className="flex flex-col items-center justify-center h-[420px] gap-4 text-rose-300 text-center px-6">
                   <Inbox className="w-12 h-12" />
                   <span className="text-sm">{errorMessage}</span>
-                  <button onClick={() => void fetchNotifications()} className="rounded-full border border-rose-400/40 px-3 py-1.5 text-xs text-rose-200">重試</button>
+                  <button onClick={() => void fetchNotifications()} className="rounded-full border border-rose-400/40 px-3 py-1.5 text-xs text-rose-200">{t('common.retry', '重試')}</button>
                 </div>
               ) : (
               <div className="flex flex-col items-center justify-center h-[420px] rounded-[28px] border border-violet-500/20 bg-gradient-to-br from-violet-500/10 via-slate-900 to-sky-500/10 text-center px-6 shadow-[0_20px_60px_rgba(76,29,149,0.22)]">
@@ -243,8 +245,8 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
                   <Sparkles className="h-8 w-8" />
                 </div>
                 <p className="text-[11px] uppercase tracking-[0.28em] text-violet-300/75">system status</p>
-                <h3 className="mt-3 text-2xl font-bold text-white">訊息中心是空的</h3>
-                <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300">目前還沒有系統公告或安全更新。</p>
+                <h3 className="mt-3 text-2xl font-bold text-white">{t('notifications.systemEmptyTitle', '訊息中心是空的')}</h3>
+                <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300">{t('notifications.systemEmptyHint', '目前還沒有系統公告或安全更新。')}</p>
               </div>
               )
             ) : (
@@ -256,7 +258,7 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
                         <Mail className="h-4 w-4" />
                       </div>
                       <div>
-                        <div className="text-sm font-semibold text-white">系統更新</div>
+                        <div className="text-sm font-semibold text-white">{t('notifications.system', '系統')}</div>
                         <div className="text-[11px] text-slate-400">{formatTimeAgo(notif.created_at)}</div>
                       </div>
                     </div>

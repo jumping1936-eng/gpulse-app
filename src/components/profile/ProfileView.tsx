@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 // ✅ 總監新增：匯入 Supabase 客戶端，準備執行徹底登出
 import { supabase } from '@/supabaseClient'; 
 import PrivateAlbumRelationships from '@/components/profile/PrivateAlbumRelationships';
@@ -85,6 +86,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     setMyAvatar,
   } = useApp();
   const { user } = useAuth();
+  const { locale, setLocale, t } = useLanguage();
 
   const requestVipFeature = () => {
     if (entitlementStatus === 'loading') {
@@ -695,11 +697,11 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
       {/* Header */}
       <div className="bg-slate-950/95 backdrop-blur-xl border-b border-white/8 px-4 py-4 sticky top-0 z-10 flex items-center justify-between">
-        <h1 className="text-white font-bold text-xl">個人檔案</h1>
+        <h1 className="text-white font-bold text-xl">{t('profile.title', '個人檔案')}</h1>
       </div>
       {ownProfileLoadStatus === 'loading' && (
         <div className="mx-4 mt-4 flex items-center justify-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 text-xs text-violet-100" role="status">
-          <Loader2 className="h-4 w-4 animate-spin" /> 正在載入個人檔案…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t('profile.loading', '正在載入個人檔案…')}
         </div>
       )}
       {ownProfileLoadStatus === 'error' && (
@@ -710,13 +712,13 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             onClick={() => setProfileReloadToken((current) => current + 1)}
             className="mt-2 rounded-lg border border-rose-300/30 px-3 py-1.5 font-semibold text-rose-100 transition hover:bg-rose-500/10"
           >
-            重試
+            {t('profile.retry', '重試')}
           </button>
         </div>
       )}
       {ownProfileLoadStatus === 'missing' && (
         <div className="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs text-amber-100" role="status">
-          尚未建立個人檔案。系統尚未找到可安全編輯的個人檔案資料。
+          {t('profile.missing', '尚未建立個人檔案。系統尚未找到可安全編輯的個人檔案資料。')}
         </div>
       )}
       <PrivateAlbumRelationships />
@@ -741,7 +743,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               ) : (
                 <div className="h-[360px] w-[78%] max-w-[300px] shrink-0 snap-center rounded-[24px] border-2 border-dashed border-white/20 bg-slate-800/50 flex flex-col items-center justify-center gap-2">
                   <ImageIcon className="w-8 h-8 text-white/30" />
-                  <span className="text-white/40 text-xs">尚無公開相片</span>
+                  <span className="text-white/40 text-xs">{t('profile.noPublicPhotos', '尚無公開相片')}</span>
                 </div>
               )}
             </div>
@@ -751,7 +753,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         {/* 主畫面：資料預覽 */}
         <div className="text-center w-full px-4">
           <div className="flex items-center justify-center gap-2">
-            <h2 className="text-white font-bold text-2xl tracking-wide">{isValidProfileName(profile.name) ? profile.name : '尚未設定名稱'}{profile.age ? `, ${profile.age}` : ''}</h2>
+            <h2 className="text-white font-bold text-2xl tracking-wide">{isValidProfileName(profile.name) ? profile.name : t('common.unknownName', '尚未設定名稱')}{profile.age ? `, ${profile.age}` : ''}</h2>
             {isVerified && <BadgeCheck className="w-6 h-6 text-cyan-400" />}
             {isVIP && <Crown className="w-5 h-5 text-amber-500" />}
           </div>
@@ -759,12 +761,12 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
           <div className="flex items-center justify-center gap-3 mt-2">
             <div className="text-gray-400 text-sm flex items-center gap-1">
               {profile.location && <span>{profile.location}</span>}
-              <span className="font-medium text-slate-400">公開狀態設定尚未開放</span>
+              <span className="font-medium text-slate-400">{t('profile.statusUnavailable', '公開狀態設定尚未開放')}</span>
             </div>
           </div>
 
           <div className="mt-5 px-4">
-            <p className="text-slate-300 text-sm line-clamp-3 leading-relaxed text-left bg-slate-950 p-4 rounded-2xl border border-white/5">{profile.bio || '尚未填寫自我介紹'}</p>
+            <p className="text-slate-300 text-sm line-clamp-3 leading-relaxed text-left bg-slate-950 p-4 rounded-2xl border border-white/5">{profile.bio || t('common.noBio', '尚未填寫自我介紹')}</p>
             
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               {profile.tribe && TRIBE_OPTIONS.some((tribe) => tribe.id === profile.tribe) && <div className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 px-3 py-1.5 rounded-full">
@@ -776,12 +778,12 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               }
               {profile.lookingFor.length > 0 && <div className="inline-flex flex-wrap items-center justify-center gap-1.5 bg-violet-500/20 border border-violet-500/30 px-3 py-1.5 rounded-full">
                 <Heart className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-violet-300 text-xs font-medium">找：{profile.lookingFor.join(' · ')}</span>
+                <span className="text-violet-300 text-xs font-medium">{t('profile.lookingFor', '尋找')}：{profile.lookingFor.join(' · ')}</span>
               </div>
               }
               {profile.role.length > 0 && <div className="inline-flex flex-wrap items-center justify-center gap-1.5 bg-sky-500/10 border border-sky-500/20 px-3 py-1.5 rounded-full">
                 <VenetianMask className="w-3.5 h-3.5 text-sky-400" />
-                <span className="text-sky-300 text-xs font-medium">偏好：{profile.role.join(' · ')}</span>
+                <span className="text-sky-300 text-xs font-medium">{t('profile.preferences', '偏好')}：{profile.role.join(' · ')}</span>
               </div>
               }
               {(profile.height || profile.weight) && (
@@ -801,14 +803,14 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         <div className="px-4">
           <button onClick={requestVipUpgrade} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 hover:border-amber-500/50 transition-all mt-2">
             <Crown className="w-4 h-4 text-amber-500" />
-            <span className="text-amber-500 text-sm font-medium">升級為 VIP</span>
+            <span className="text-amber-500 text-sm font-medium">{t('vip.upgrade', '升級為 VIP')}</span>
             <ChevronRight className="w-3.5 h-3.5 text-amber-500/60" />
           </button>
         </div>
       )}
 
       {entitlementStatus === 'loading' && (
-        <p className="px-4 mt-3 text-center text-xs text-white/40">正在確認 VIP 資格…</p>
+        <p className="px-4 mt-3 text-center text-xs text-white/40">{t('vip.loading', '正在確認 VIP 資格…')}</p>
       )}
 
       {entitlementStatus === 'error' && (
@@ -818,24 +820,46 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       {/* 主畫面：帳號設定選單 */}
       <div className="px-4 mt-6 mb-8">
         <h3 className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2">
-          <Settings className="w-3.5 h-3.5" /> 帳號設定
+          <Settings className="w-3.5 h-3.5" /> {t('settings.title', '帳號設定')}
         </h3>
         <div className="bg-slate-950 border border-white/8 rounded-2xl divide-y divide-white/5 overflow-hidden">
           {/* ✅ 總監新增：將「封鎖名單」加入到陣列中渲染 */}
-          {['編輯檔案', '通知設定', '隱私設定', '封鎖名單', '幫助與支援'].map(item => (
-            <button key={item} onClick={() => handleMenuClick(item)} className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/10 transition-colors">
+          {[
+            { value: '編輯檔案', label: t('settings.editProfile', '編輯檔案') },
+            { value: '通知設定', label: t('settings.notifications', '通知設定') },
+            { value: '隱私設定', label: t('settings.privacy', '隱私設定') },
+            { value: '封鎖名單', label: t('settings.blocked', '封鎖名單') },
+            { value: '幫助與支援', label: t('settings.help', '幫助與支援') },
+          ].map(item => (
+            <button key={item.value} onClick={() => handleMenuClick(item.value)} className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/10 transition-colors">
               <div className="flex items-center gap-3">
                 {/* 給封鎖名單一個特殊的小圖示 */}
-                {item === '封鎖名單' && <Ban className="w-4 h-4 text-slate-400" />}
-                <span className="text-white/80 text-sm">{item}</span>
+                {item.value === '封鎖名單' && <Ban className="w-4 h-4 text-slate-400" />}
+                <span className="text-white/80 text-sm">{item.label}</span>
               </div>
               <ChevronRight className="w-4 h-4 text-white/20" />
             </button>
           ))}
+
+          <label className="flex items-center justify-between gap-3 px-4 py-3.5 text-left">
+            <div>
+              <span className="text-white/80 text-sm">{t('settings.language', '語言 / Language')}</span>
+              <p className="mt-1 text-xs text-slate-500">{t('settings.language.hint', '此裝置上的顯示語言')}</p>
+            </div>
+            <select
+              aria-label={t('settings.language', '語言 / Language')}
+              value={locale}
+              onChange={(event) => setLocale(event.target.value === 'en' ? 'en' : 'zh-TW')}
+              className="rounded-lg border border-white/10 bg-slate-900 px-2 py-1.5 text-xs text-white outline-none focus:border-violet-500"
+            >
+              <option value="zh-TW">{t('settings.language.zhTW', '繁體中文')}</option>
+              <option value="en">{t('settings.language.en', 'English')}</option>
+            </select>
+          </label>
           
           <button onClick={() => handleMenuClick('登出')} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-800 transition-colors">
             <LogOut className="w-4 h-4 text-slate-400" />
-            <span className="text-slate-300 text-sm">登出</span>
+            <span className="text-slate-300 text-sm">{t('settings.logout', '登出')}</span>
           </button>
 
           <button
@@ -847,13 +871,13 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             <div className="flex items-start gap-3">
               <Trash2 className="w-4 h-4 text-red-500" />
               <div>
-                <span className="text-red-500 font-medium text-sm">永久刪除帳號目前無法使用</span>
+                <span className="text-red-500 font-medium text-sm">{t('accountDeletion.unavailableTitle', '永久刪除帳號目前無法使用')}</span>
                 <p id="account-deletion-unavailable" className="mt-1 text-xs text-slate-400">
-                  GPulse 尚未具備可安全刪除 Auth 帳號、關聯資料與媒體的後端服務；登出不會刪除帳號或資料。
+                  {t('accountDeletion.unavailableHint', 'GPulse 尚未具備可安全刪除 Auth 帳號、關聯資料與媒體的後端服務；登出不會刪除帳號或資料。')}
                 </p>
               </div>
             </div>
-            <span className="text-xs text-slate-500">未提供</span>
+            <span className="text-xs text-slate-500">{t('accountDeletion.unavailable', '未提供')}</span>
           </button>
         </div>
       </div>

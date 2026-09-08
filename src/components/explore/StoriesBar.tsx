@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Loader2, Plus } from 'lucide-react';
 import { getPublicProfilePhoto } from '@/utils/profile';
+import { useLanguage } from '@/context/LanguageContext';
 import type { OwnActiveStory, StoryProfile, VisibleStoryMetadata } from './storyTypes';
 
 interface Props {
@@ -45,6 +46,7 @@ export default function StoriesBar({
   onOpenOwn,
   onOpenVisible,
 }: Props) {
+  const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ownPhoto = getPublicProfilePhoto(ownProfile?.public_photos, ownProfile?.avatar_url);
 
@@ -56,7 +58,7 @@ export default function StoriesBar({
   }
 
   return (
-    <section className="px-3 pt-4 pb-2" aria-label="限時動態">
+    <section className="px-3 pt-4 pb-2" aria-label={t('stories.label', '限時動態')}>
       <input
         ref={fileInputRef}
         type="file"
@@ -83,9 +85,9 @@ export default function StoriesBar({
             }`}>
               <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-slate-800">
                 {ownPhoto ? (
-                  <img src={ownPhoto} alt="我的個人檔案" className="h-full w-full object-cover" />
+                  <img src={ownPhoto} alt={t('profile.title', '個人檔案')} className="h-full w-full object-cover" />
                 ) : (
-                  <span className="text-lg font-bold text-white/50">我</span>
+                  <span className="text-lg font-bold text-white/50">{t('stories.me', '我')}</span>
                 )}
               </div>
             </div>
@@ -94,7 +96,7 @@ export default function StoriesBar({
             </div>
           </div>
           <span className="max-w-[64px] truncate text-[10px] font-medium text-white/60">
-            {ownStory ? '我的動態' : '新增動態'}
+            {ownStory ? t('stories.myStory', '我的動態') : t('stories.add', '新增動態')}
           </span>
         </button>
 
@@ -102,7 +104,7 @@ export default function StoriesBar({
           const profile = profilesById.get(story.owner_id);
           const photo = getPublicProfilePhoto(profile?.public_photos, profile?.avatar_url);
           const viewed = story.viewed_by_caller;
-          const displayName = profile?.full_name || '尚未設定名稱';
+          const displayName = profile?.full_name || t('common.unknownName', '尚未設定名稱');
 
           return (
             <button
@@ -144,11 +146,11 @@ export default function StoriesBar({
         })}
       </div>
 
-      {isLoading && <p className="mt-2 text-center text-xs text-white/40">正在載入限時動態…</p>}
+      {isLoading && <p className="mt-2 text-center text-xs text-white/40">{t('stories.loading', '正在載入限時動態…')}</p>}
       {errorMessage && <p className="mt-2 text-center text-xs text-rose-300">{errorMessage}</p>}
       {notice && <p className="mt-2 text-center text-xs text-emerald-300">{notice}</p>}
       {!isLoading && !errorMessage && visibleStories.length === 0 && (
-        <p className="mt-2 text-center text-xs text-white/35">目前沒有可觀看的限時動態。</p>
+        <p className="mt-2 text-center text-xs text-white/35">{t('stories.empty', '目前沒有可觀看的限時動態。')}</p>
       )}
     </section>
   );

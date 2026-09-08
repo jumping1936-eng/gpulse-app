@@ -4,7 +4,9 @@ import { Conversation, Message } from '@/types';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
+import { useLanguage } from '@/context/LanguageContext';
 import ProfileModal from '@/components/explore/ProfileModal';
+import { PUBLIC_PROFILE_FIELDS } from '@/utils/profile';
 
 interface Props {
   convo: Conversation;
@@ -93,6 +95,7 @@ const MessageBubble = ({
 };
 
 export default function ChatRoom({ convo, onBack }: Props) {
+  const { t } = useLanguage();
   const { user: currentUser } = useAuth();
   const { setUnreadChat, blockUser, blockedUsers, blockListStatus } = useApp();
   const myId = currentUser?.id;
@@ -111,7 +114,6 @@ export default function ChatRoom({ convo, onBack }: Props) {
     full_name?: string;
     avatar_url?: string;
     age?: string;
-    status?: string;
     tribe?: string;
     bio?: string;
     public_photos?: string[];
@@ -128,7 +130,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
   const chatRoomChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const clearedAtRef = useRef<string | null>(null);
 
-  const targetName = convo.other_user?.full_name || '尚未設定名稱';
+  const targetName = convo.other_user?.full_name || t('common.unknownName', '尚未設定名稱');
   const targetAvatar = convo.other_user?.avatar_url || convo.avatar || '';
 
   useEffect(() => {
@@ -370,7 +372,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url, public_photos, age, status, tribe, bio, height, role, looking_for, is_vip')
+        .select(PUBLIC_PROFILE_FIELDS)
         .eq('id', convo.other_user.id)
         .maybeSingle();
 
@@ -384,7 +386,6 @@ export default function ChatRoom({ convo, onBack }: Props) {
         avatar_url: data.avatar_url ?? targetAvatar,
         public_photos: Array.isArray(data.public_photos) ? data.public_photos : undefined,
         age: typeof data.age === 'number' ? String(data.age) : undefined,
-        status: typeof data.status === 'string' ? data.status : undefined,
         tribe: data.tribe,
         bio: data.bio,
         height: typeof data.height === 'number' ? String(data.height) : undefined,
@@ -471,7 +472,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
                 ? 'bg-pink-500/20 text-pink-400 shadow-[0_0_10px_rgba(236,72,153,0.3)]'
                 : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/80'
             }`}
-            title="限時銷毀模式"
+            title={t('chat.vanishMode', '限時銷毀模式')}
           >
             <Timer className="w-5 h-5" />
           </button>
@@ -481,7 +482,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
               type="button"
               onClick={() => setMenuOpen((prev) => !prev)}
               className="p-1.5 rounded-full bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
-              aria-label="開啟更多選單"
+              aria-label={t('chat.more', '開啟更多選單')}
             >
               <MoreVertical className="w-5 h-5" />
             </button>
@@ -495,7 +496,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Trash2 className="h-4 w-4 text-rose-400" />
-                  {isClearingConversation ? '清除中…' : '清除聊天紀錄'}
+                  {isClearingConversation ? t('chat.clearing', '清除中…') : t('chat.clear', '清除聊天紀錄')}
                 </button>
                 <button
                   type="button"
@@ -503,11 +504,11 @@ export default function ChatRoom({ convo, onBack }: Props) {
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
                 >
                   <ShieldOff className="h-4 w-4 text-amber-400" />
-                  封鎖此人
+                  {t('chat.block', '封鎖此人')}
                 </button>
                 <div className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-500">
                   <Lock className="h-4 w-4 text-violet-400" />
-                  私密相簿存取尚未開放
+                  {t('chat.privateAlbumUnavailable', '私密相簿存取尚未開放')}
                 </div>
                 <button
                   type="button"
@@ -515,7 +516,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
                 >
                   <UserSquare2 className="h-4 w-4 text-cyan-400" />
-                  查看個人檔案
+                  {t('chat.viewProfile', '查看個人檔案')}
                 </button>
               </div>
             )}
@@ -527,7 +528,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
         {messageError && <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-center text-xs text-rose-200">{messageError}</p>}
         {!isLoadingMessages && !messageError && messages.length === 0 && (
           <div className="flex h-full items-center justify-center text-center text-sm text-white/40">
-            尚無新訊息
+            {t('chat.empty', '尚無新訊息')}
           </div>
         )}
         {messages.map(msg => (
@@ -549,7 +550,6 @@ export default function ChatRoom({ convo, onBack }: Props) {
             avatar_url: profileModalData?.avatar_url ?? targetAvatar,
             public_photos: profileModalData?.public_photos,
             age: profileModalData?.age,
-            status: profileModalData?.status,
             tribe: profileModalData?.tribe,
             bio: profileModalData?.bio ?? convo.other_user?.bio,
             height: profileModalData?.height,
@@ -583,7 +583,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder={vanishMode ? "閱後即焚 (10秒)..." : "輸入訊息..."}
+              placeholder={vanishMode ? t('chat.vanishPlaceholder', '閱後即焚（10 秒）…') : t('chat.placeholder', '輸入訊息…')}
               className={`flex-1 bg-transparent text-[13px] py-2 outline-none transition-colors ${
                 vanishMode ? 'text-pink-100 placeholder-pink-500/50' : 'text-white placeholder-white/30'
               }`}

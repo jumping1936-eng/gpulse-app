@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2, Trash2, X } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import { getPublicProfilePhoto } from '@/utils/profile';
+import { useLanguage } from '@/context/LanguageContext';
 import type { StorySelection, VisibleStoryContent } from './storyTypes';
 
 interface Props {
@@ -24,6 +25,7 @@ function isVisibleStoryContent(value: unknown): value is VisibleStoryContent {
 }
 
 export default function StoryViewer({ selection, onClose, onViewed, onUnavailable, onDeleteOwn }: Props) {
+  const { t } = useLanguage();
   const [content, setContent] = useState<VisibleStoryContent | null>(
     selection.kind === 'own'
       ? {
@@ -117,7 +119,7 @@ export default function StoryViewer({ selection, onClose, onViewed, onUnavailabl
 
   const profile = selection.profile;
   const profilePhoto = getPublicProfilePhoto(profile?.public_photos, profile?.avatar_url);
-  const profileName = profile?.full_name || '尚未設定名稱';
+  const profileName = profile?.full_name || t('common.unknownName', '尚未設定名稱');
 
   async function handleDelete() {
     if (selection.kind !== 'own') return;
@@ -147,13 +149,13 @@ export default function StoryViewer({ selection, onClose, onViewed, onUnavailabl
               type="button"
               onClick={handleDelete}
               disabled={isDeleting}
-              aria-label="刪除我的限時動態"
+              aria-label={t('stories.deleteLabel', '刪除我的限時動態')}
               className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-500/80 disabled:cursor-wait"
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : <Trash2 className="h-4 w-4 text-white" />}
             </button>
           )}
-          <button type="button" onClick={onClose} aria-label="關閉限時動態" className="flex h-8 w-8 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm">
+          <button type="button" onClick={onClose} aria-label={t('stories.closeLabel', '關閉限時動態')} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm">
             <X className="h-4 w-4 text-white" />
           </button>
         </div>
@@ -161,9 +163,9 @@ export default function StoryViewer({ selection, onClose, onViewed, onUnavailabl
 
       <div className="flex flex-1 items-center justify-center bg-slate-950">
         {isLoading && <Loader2 className="h-8 w-8 animate-spin text-violet-300" />}
-        {isUnavailable && <p className="px-8 text-center text-sm text-white/60">此限時動態目前無法觀看。</p>}
+        {isUnavailable && <p className="px-8 text-center text-sm text-white/60">{t('stories.unavailable', '此限時動態目前無法觀看。')}</p>}
         {!isLoading && !isUnavailable && content && (
-          <img src={content.media_data} alt={`${profileName} 的限時動態`} className="h-full w-full object-contain" />
+          <img src={content.media_data} alt={`${profileName} ${t('stories.label', '限時動態')}`} className="h-full w-full object-contain" />
         )}
         {!isLoading && !isUnavailable && !content && errorMessage && (
           <p className="px-8 text-center text-sm text-rose-200">{errorMessage}</p>

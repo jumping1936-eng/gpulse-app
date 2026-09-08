@@ -8,6 +8,7 @@ import ProfileModal from './ProfileModal';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { ArrowUpRight, Crown, MapPin, Compass } from 'lucide-react';
 import { getPublicProfilePhoto, isValidProfileName, PUBLIC_PROFILE_FIELDS } from '@/utils/profile';
 import { DistanceBucket, useProfileDistanceBuckets } from '@/hooks/useProfileDistanceBuckets';
@@ -157,6 +158,7 @@ const normalizeProfiles = (records: Array<Record<string, unknown> | ProfileRecor
 export default function ExploreTab() {
   const { user: authUser } = useAuth();
   const { blockedUsers, blockListStatus } = useApp();
+  const { t } = useLanguage();
   const [viewingStory, setViewingStory] = useState<StorySelection | null>(null);
   const [activeTribe, setActiveTribe] = useState<TribeType>('all');
 
@@ -469,17 +471,17 @@ export default function ExploreTab() {
               : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
           }`}>
             {blockListStatus === 'loading'
-              ? '正在確認封鎖名單…'
-              : '目前無法安全載入探索名單，請稍後再試。'}
+              ? t('explore.blockLoading', '正在確認封鎖名單…')
+              : t('explore.blockUnavailable', '目前無法安全載入探索名單，請稍後再試。')}
           </div>
         )}
         <div className="mb-3 flex items-center justify-between">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Discover</p>
-            <h2 className="text-lg font-bold text-white">探索使用者</h2>
+            <h2 className="text-lg font-bold text-white">{t('explore.title', '探索使用者')}</h2>
           </div>
           <button className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-200">
-            查看全部
+            {t('explore.viewAll', '查看全部')}
             <ArrowUpRight className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -499,7 +501,7 @@ export default function ExploreTab() {
         ) : profileFetchError ? null : nearbyUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/30">
             <Compass className="w-8 h-8" />
-            <p className="text-xs">暫時沒有其他使用者</p>
+            <p className="text-xs">{t('explore.noUsers', '暫時沒有其他使用者')}</p>
           </div>
         ) : (
           <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -528,7 +530,7 @@ export default function ExploreTab() {
                     )}
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                       <div>
-                        <p className="text-base font-bold leading-none text-white">{isValidProfileName(user.full_name) ? user.full_name : '尚未設定名稱'}</p>
+                        <p className="text-base font-bold leading-none text-white">{isValidProfileName(user.full_name) ? user.full_name : t('common.unknownName', '尚未設定名稱')}</p>
                         {user.age && <p className="mt-1 text-[10px] text-white/80">{user.age}</p>}
                       </div>
                       {user.isOnline && <div className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-slate-950/60 px-1.5 py-1 text-[9px] text-emerald-300 backdrop-blur-xl">
@@ -559,17 +561,17 @@ export default function ExploreTab() {
         <div className="mb-3 flex items-center justify-between">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-300/80">For You</p>
-            <h2 className="text-lg font-bold text-white">系統最新推薦</h2>
+            <h2 className="text-lg font-bold text-white">{t('explore.latest', '系統最新推薦')}</h2>
           </div>
           <button className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-orange-500/20">
-            今日精選
+            {t('home.featured', '今日精選')}
           </button>
         </div>
 
         <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {[
-            { id: 'all', label: '全部' },
-            { id: 'vip', label: 'VIP' },
+            { id: 'all', label: t('home.all', '全部') },
+            { id: 'vip', label: t('home.vip', 'VIP') },
           ].map((filter) => (
             <button
               key={filter.id}
@@ -603,7 +605,7 @@ export default function ExploreTab() {
         ) : profileFetchError ? null : filteredRecommendations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 gap-2 text-white/30">
             <Crown className="w-8 h-8" />
-            <p className="text-xs">目前還沒有推薦使用者</p>
+            <p className="text-xs">{t('explore.noRecommendations', '目前還沒有推薦使用者')}</p>
           </div>
         ) : (
           <div className="columns-2 gap-3">
@@ -634,7 +636,7 @@ export default function ExploreTab() {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <h3 className="text-base font-bold text-white">{isValidProfileName(item.full_name) ? item.full_name : '尚未設定名稱'}{item.age ? `, ${item.age}` : ''}</h3>
+                        <h3 className="text-base font-bold text-white">{isValidProfileName(item.full_name) ? item.full_name : t('common.unknownName', '尚未設定名稱')}{item.age ? `, ${item.age}` : ''}</h3>
                         {item.isVIP && <Crown className="h-3.5 w-3.5 text-amber-400" />}
                       </div>
                       {item.location && <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">

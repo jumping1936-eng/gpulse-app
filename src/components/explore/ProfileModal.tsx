@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Heart, MessageCircle, Lock, BadgeCheck, Crown, ShieldOff, MapPin, Ruler, Users, Search, Rocket } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { supabase } from '@/supabaseClient';
 import { getPublicProfileGallery, isValidProfileName } from '@/utils/profile';
 import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export default function ProfileModal({ user, onClose }: Props) {
+  const { t } = useLanguage();
   const { blockUser, blockedUsers, blockListStatus } = useApp();
   const { user: currentUser } = useAuth();
   
@@ -54,9 +56,9 @@ export default function ProfileModal({ user, onClose }: Props) {
   const bio = typeof user.bio === 'string' && user.bio.trim().length > 0 ? user.bio.trim() : undefined;
   const location = typeof user.location === 'string' && user.location.trim().length > 0 ? user.location.trim() : undefined;
   const profileDetails = [
-    { icon: Ruler, label: '身高', value: user.height },
-    { icon: Users, label: '角色', value: user.role },
-    { icon: Search, label: '尋找', value: user.looking_for },
+    { icon: Ruler, label: t('profile.height', '身高'), value: user.height },
+    { icon: Users, label: t('profile.role', '角色'), value: user.role },
+    { icon: Search, label: t('profile.lookingFor', '尋找'), value: user.looking_for },
   ].filter((detail): detail is { icon: typeof Ruler; label: string; value: string } => (
     typeof detail.value === 'string' && detail.value.trim().length > 0
   ));
@@ -265,7 +267,7 @@ export default function ProfileModal({ user, onClose }: Props) {
               </button>
               <button onClick={() => setShowBlockConfirm(true)} className="flex items-center gap-1.5 bg-slate-950/60 backdrop-blur-xl border border-red-500/30 rounded-full px-3 py-1.5 hover:bg-red-950/60 transition-all pointer-events-auto">
                 <ShieldOff className="w-3.5 h-3.5 text-red-400"/>
-                <span className="text-red-400 text-xs font-medium">封鎖</span>
+                <span className="text-red-400 text-xs font-medium">{t('block.action', '封鎖')}</span>
               </button>
             </div>
           </div>
@@ -274,7 +276,7 @@ export default function ProfileModal({ user, onClose }: Props) {
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-white text-xl font-bold">{displayName || '尚未設定名稱'}</h2>
+                  <h2 className="text-white text-xl font-bold">{displayName || t('common.unknownName', '尚未設定名稱')}</h2>
                   {displayAge && <><span className="text-white/40">,</span><span className="text-white/60 text-lg">{displayAge}</span></>}
                   {user?.isVerified && <BadgeCheck className="w-5 h-5 text-cyan-400"/>}
                   {user?.isVIP && <Crown className="w-4 h-4 text-amber-500"/>}
@@ -294,7 +296,7 @@ export default function ProfileModal({ user, onClose }: Props) {
               </div>
             </div>
 
-            <p className="text-white/65 text-sm leading-relaxed">{bio ?? '尚未填寫自我介紹'}</p>
+            <p className="text-white/65 text-sm leading-relaxed">{bio ?? t('common.noBio', '尚未填寫自我介紹')}</p>
 
             {profileDetails.length > 0 && <div className={`grid gap-2 ${profileDetails.length === 1 ? 'grid-cols-1' : profileDetails.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
               {profileDetails.map((detail) => {
@@ -311,7 +313,7 @@ export default function ProfileModal({ user, onClose }: Props) {
 
             {publicGallery.length > 1 && <div className="grid grid-cols-3 gap-2">
               {publicGallery.slice(1).map((photo, index) => (
-                <img key={photo} src={photo} alt={`${displayName || '個人檔案'} 公開照片 ${index + 2}`} className="aspect-square w-full rounded-xl object-cover border border-white/10" />
+                <img key={photo} src={photo} alt={`${displayName || t('profile.title', '個人檔案')} ${index + 2}`} className="aspect-square w-full rounded-xl object-cover border border-white/10" />
               ))}
             </div>}
 
@@ -320,10 +322,10 @@ export default function ProfileModal({ user, onClose }: Props) {
                 <Lock className="w-5 h-5 text-amber-500"/>
               </div>
               <div className="flex-1">
-                <p className="text-white/80 text-sm font-semibold">私密相簿</p>
-                <p className="text-white/40 text-xs">{albumStatus === 'pending' ? '申請等待對方回覆' : albumStatus === 'approved' ? '已獲得存取權' : albumStatus === 'rejected' ? '目前無法存取' : '可向對方申請存取'}</p>
+                <p className="text-white/80 text-sm font-semibold">{t('album.title', '私密相簿')}</p>
+                <p className="text-white/40 text-xs">{albumStatus === 'pending' ? t('album.pending', '申請等待對方回覆') : albumStatus === 'approved' ? t('album.approved', '已獲得存取權') : albumStatus === 'rejected' ? t('album.rejected', '目前無法存取') : t('album.available', '可向對方申請存取')}</p>
               </div>
-              {albumStatus === 'approved' ? <button onClick={() => void handleLoadAlbum()} disabled={albumLoading} className="text-amber-300 text-xs disabled:opacity-50">查看</button> : <button onClick={() => void handleAlbumRequest()} disabled={albumLoading || !hasInteractionTarget} className="text-amber-300 text-xs disabled:opacity-50">{albumLoading ? '處理中' : '申請'}</button>}
+              {albumStatus === 'approved' ? <button onClick={() => void handleLoadAlbum()} disabled={albumLoading} className="text-amber-300 text-xs disabled:opacity-50">{t('album.view', '查看')}</button> : <button onClick={() => void handleAlbumRequest()} disabled={albumLoading || !hasInteractionTarget} className="text-amber-300 text-xs disabled:opacity-50">{albumLoading ? t('album.processing', '處理中') : t('album.request', '申請')}</button>}
             </div>
             {albumMessage && <p className="text-xs text-amber-200" role="status">{albumMessage}</p>}
             {albumPhotos.length > 0 && <div className="grid grid-cols-3 gap-2">{albumPhotos.map((photo) => <img key={photo} src={photo} alt="已授權私密照片" className="aspect-square w-full rounded-xl object-cover" />)}</div>}
@@ -338,7 +340,7 @@ export default function ProfileModal({ user, onClose }: Props) {
               className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 pointer-events-auto transform ${interactionUnavailable || likeState === 'submitting' || likeState === 'sent' || likeState === 'cooldown' ? 'opacity-50 cursor-not-allowed scale-[0.98]' : 'hover:scale-[1.02] active:scale-95'} bg-pink-500/20 border border-pink-500/40 text-pink-400 shadow-lg shadow-pink-500/10`}
             >
               {likeState === 'sent' || likeState === 'cooldown' ? <Heart className="w-5 h-5 transition-all duration-200 fill-pink-400 scale-110" /> : <Heart className="w-5 h-5 transition-all duration-200" />}
-              {likeState === 'submitting' ? '傳送中' : likeState === 'sent' ? '已發送' : likeState === 'cooldown' ? '冷卻中' : '心動'}
+              {likeState === 'submitting' ? t('interaction.sending', '傳送中') : likeState === 'sent' ? t('interaction.sent', '已發送') : likeState === 'cooldown' ? t('interaction.cooldown', '冷卻中') : t('interaction.like', '心動')}
             </button>
             <button
               onClick={handleBoost}
@@ -346,7 +348,7 @@ export default function ProfileModal({ user, onClose }: Props) {
               className={`flex-[1.2] flex flex-col items-center justify-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 rounded-2xl font-bold text-xs transition-all duration-200 shadow-lg shadow-orange-500/20 border border-amber-300/30 pointer-events-auto ${interactionUnavailable || boostState === 'submitting' || boostState === 'sent' ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-95'}`}
             >
               <Rocket className="w-5 h-5 transition-all duration-200" />
-              {boostState === 'submitting' ? '推送中' : boostState === 'sent' ? '已推送' : '推送'}
+              {boostState === 'submitting' ? t('interaction.boosting', '推送中') : boostState === 'sent' ? t('interaction.boosted', '已推送') : t('interaction.boost', '推送')}
             </button>
             <button onClick={handleMessage} className="flex-1 flex flex-col items-center justify-center gap-1 bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 hover:scale-[1.02] active:scale-95 pointer-events-auto">
               <MessageCircle className="w-5 h-5"/>
@@ -364,11 +366,11 @@ export default function ProfileModal({ user, onClose }: Props) {
           <div className="absolute inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center p-6 z-[70] pointer-events-auto">
             <div className="bg-slate-950 border border-red-500/30 rounded-2xl p-6 w-full max-w-xs text-center shadow-lg shadow-red-500/20">
               <ShieldOff className="w-10 h-10 text-red-400 mx-auto mb-3"/>
-              <h3 className="text-white font-bold mb-2">封鎖 {user?.full_name}？</h3>
-              <p className="text-white/50 text-xs mb-5">他將無法看到您的個人檔案或聯繫您</p>
+              <h3 className="text-white font-bold mb-2">{t('block.confirmTitle', '封鎖此使用者？')}</h3>
+              <p className="text-white/50 text-xs mb-5">{t('block.confirmHint', '對方將無法看到您的個人檔案或聯繫您。')}</p>
               <div className="flex gap-3 mt-5">
-                <button onClick={() => setShowBlockConfirm(false)} className="flex-1 bg-white/8 border border-white/10 text-white/70 py-2.5 rounded-xl text-sm font-medium hover:bg-white/12">取消</button>
-                <button onClick={handleBlock} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-red-500/20">確認封鎖</button>
+                <button onClick={() => setShowBlockConfirm(false)} className="flex-1 bg-white/8 border border-white/10 text-white/70 py-2.5 rounded-xl text-sm font-medium hover:bg-white/12">{t('common.cancel', '取消')}</button>
+                <button onClick={handleBlock} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-red-500/20">{t('block.confirm', '確認封鎖')}</button>
               </div>
             </div>
           </div>

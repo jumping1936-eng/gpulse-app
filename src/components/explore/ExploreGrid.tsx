@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Crown, BadgeCheck, Camera } from 'lucide-react';
 import { TribeType } from '@/types';
 import { useApp } from '@/context/AppContext';
+import { useLanguage } from '@/context/LanguageContext';
 import ProfileModal from './ProfileModal';
 import { getPublicProfilePhoto, isValidProfileName } from '@/utils/profile';
 
@@ -28,6 +29,7 @@ interface Props {
 
 export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewProfile }: Props) {
   const { blockedUsers, isVerified, isVIP } = useApp();
+  const { t } = useLanguage();
   const [selectedUser, setSelectedUser] = useState<ProfileRow | null>(null);
   const myPrimaryPhoto = getPublicProfilePhoto(myProfile?.public_photos, myProfile?.avatar_url);
 
@@ -75,21 +77,21 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewPr
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-violet-700/50 to-blue-700/30 flex flex-col items-center justify-center gap-1">
               <Camera className="w-6 h-6 text-violet-400/60" />
-              <span className="text-violet-400/60 text-xs">新增照片</span>
+              <span className="text-violet-400/60 text-xs">{t('profile.addPhoto', '新增照片')}</span>
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
           <div className="absolute bottom-2 left-2 right-2">
             <div className="flex items-center gap-1">
               <span className="text-white text-xs font-bold truncate">
-                {isValidProfileName(myProfile?.full_name ?? '') ? myProfile?.full_name : '尚未設定名稱'}
+                {isValidProfileName(myProfile?.full_name ?? '') ? myProfile?.full_name : t('common.unknownName', '尚未設定名稱')}
               </span>
               {isVerified && <BadgeCheck className="w-3 h-3 text-cyan-400" />}
               {isVIP && <Crown className="w-3 h-3 text-amber-500" />}
             </div>
           </div>
           <div className="absolute top-2 left-2 bg-violet-600/40 backdrop-blur-xl border border-violet-500/40 rounded-full px-2 py-0.5">
-            <span className="text-violet-300 text-[9px] font-bold">你自己</span>
+            <span className="text-violet-300 text-[9px] font-bold">{t('profile.you', '你自己')}</span>
           </div>
         </button>
 
@@ -119,7 +121,7 @@ export default function ExploreGrid({ activeTribe, profiles, myProfile, onViewPr
             <div className="absolute bottom-1.5 left-1.5 right-1.5">
               <div className="flex items-center gap-1">
                 {/* 注意：真實資料庫使用的是 full_name */}
-                <span className="text-white text-xs font-semibold truncate">{isValidProfileName(user.full_name ?? '') ? user.full_name : '尚未設定名稱'}</span>
+                <span className="text-white text-xs font-semibold truncate">{isValidProfileName(user.full_name ?? '') ? user.full_name : t('common.unknownName', '尚未設定名稱')}</span>
                 {user.isVerified && <BadgeCheck className="w-3 h-3 text-cyan-400 flex-shrink-0" />}
                 {user.isVIP && <Crown className="w-3 h-3 text-amber-500 flex-shrink-0" />}
               </div>
