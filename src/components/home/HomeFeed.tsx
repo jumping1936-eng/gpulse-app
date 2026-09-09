@@ -386,7 +386,7 @@ export default function HomeFeed() {
 
         <header className="mb-5 flex items-center justify-between">
           <div>
-            <GPulseLogo size="sm" />
+            <GPulseLogo size="sm" glow="none" />
             <h1 className="mt-1 text-2xl font-black tracking-tight">Home</h1>
           </div>
           <div className="flex items-center gap-2">

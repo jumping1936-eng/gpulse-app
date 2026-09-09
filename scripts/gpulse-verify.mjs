@@ -125,6 +125,14 @@ checkTrue('profile settings presents a language selector', profileViewSource.inc
 checkTrue('VIP dialog has Escape and backdrop dismissal', paywallModalSource.includes("event.key === 'Escape'") && paywallModalSource.includes('event.target === event.currentTarget'));
 checkTrue('canonical GPulse brand component exists', brandLogoSource.includes('GPulseLogo'));
 checkTrue('canonical GPulse capitalization is preserved', brandLogoSource.includes('GPulse'));
+checkTrue(
+  'canonical brand supports full, wordmark, and mark variants',
+  brandLogoSource.includes("'full' | 'wordmark' | 'mark'"),
+);
+checkTrue(
+  'canonical brand supports bounded glow variants',
+  brandLogoSource.includes("'none' | 'soft' | 'strong'"),
+);
 checkTrue('Splash uses canonical GPulse brand component', appSource.includes('<GPulseLogo'));
 checkTrue('Login uses canonical GPulse brand component', loginScreenSource.includes('<GPulseLogo'));
 checkTrue('Splash no longer uses generic Activity as brand identity', !appSource.includes('Activity'));

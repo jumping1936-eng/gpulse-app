@@ -245,7 +245,7 @@ export default function LoginScreen({
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-12 relative z-0 mt-12">
         <div className="mb-8 flex flex-col items-center">
-          <GPulseLogo size="lg" className="mb-4" />
+          <GPulseLogo size="lg" glow="soft" className="mb-4" />
           <p className="text-white/40 text-sm mt-1 tracking-tight uppercase">{t.tagline}</p>
         </div>
 

@@ -69,12 +69,16 @@ function AppContent() {
   // 畫面 1：雙重 Loading 狀態 (地理檢查 or 驗證身份解析中)
   if (isChecking || isAuthLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
-        <GPulseLogo size="lg" variant="full" />
+      <div className="relative min-h-screen overflow-hidden bg-[#030617] flex flex-col items-center justify-center gap-4">
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 h-[34rem] w-[58rem] -translate-x-1/2 -translate-y-[47%] rounded-[50%] border border-indigo-500/15 shadow-[0_0_65px_rgba(79,70,229,0.16)]" />
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 h-[25rem] w-[47rem] -translate-x-1/2 -translate-y-[45%] rounded-[50%] border border-violet-400/20 shadow-[0_0_45px_rgba(139,92,246,0.16)]" />
+        <div className="relative flex flex-col items-center gap-4">
+          <GPulseLogo size="lg" variant="full" glow="strong" />
         <Loader2 className="w-6 h-6 text-violet-400/60 animate-spin" />
         <p className="text-white/35 text-xs tracking-[0.18em] uppercase">
           {isAuthLoading ? t('splash.authLoading', '正在驗證身份狀態…') : t('splash.locationLoading', '正在檢查您的所在地區…')}
         </p>
+        </div>
       </div>
     );
   }
