@@ -90,17 +90,17 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
   const requestVipFeature = () => {
     if (entitlementStatus === 'loading') {
-      alert('正在確認 VIP 資格，請稍後再試。');
+      alert(t('profile.vipChecking', '正在確認 VIP 資格，請稍後再試。'));
       return false;
     }
 
     if (entitlementStatus === 'error') {
-      alert(entitlementError ?? '無法確認 VIP 資格，請稍後再試。');
+      alert(entitlementError ?? t('vip.unavailable', '目前無法確認 VIP 資格。'));
       return false;
     }
 
     if (entitlementStatus === 'unauthenticated') {
-      alert('請先登入後再使用 VIP 功能。');
+      alert(t('profile.loginRequired', '請先登入後再使用此功能。'));
       return false;
     }
 
@@ -130,13 +130,24 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
   const LOOKING_FOR_OPTIONS = ['約會', '交友', '聊天', '打撲克', '不設限'];
   const ROLE_OPTIONS = ['不分', '依賴', '照顧', '互補', '不設限'];
+  const optionLabelByValue: Record<string, string> = {
+    '約會': t('option.dating', '約會'),
+    '交友': t('option.friends', '交友'),
+    '聊天': t('option.chatting', '聊天'),
+    '打撲克': t('option.poker', '打撲克'),
+    '不設限': t('option.any', '不設限'),
+    '不分': t('option.versatile', '不分'),
+    '依賴': t('option.dependent', '依賴'),
+    '照顧': t('option.caring', '照顧'),
+    '互補': t('option.complementary', '互補'),
+  };
   
   const TRIBE_OPTIONS = [
-    { id: 'bear', label: '熊族', icon: '🐻' },
-    { id: 'wolf', label: '狼族', icon: '🐺' },
-    { id: 'otter', label: '水獺', icon: '🦦' },
-    { id: 'youth', label: '少年', icon: '✨' },
-    { id: 'gym', label: '巨巨', icon: '💪' }
+    { id: 'bear', label: t('tribe.bear', '熊族'), icon: '🐻' },
+    { id: 'wolf', label: t('tribe.wolf', '狼族'), icon: '🐺' },
+    { id: 'otter', label: t('tribe.otter', '水獺'), icon: '🦦' },
+    { id: 'youth', label: t('tribe.youth', '少年'), icon: '✨' },
+    { id: 'gym', label: t('tribe.gym', '巨巨'), icon: '💪' }
   ];
 
   // ==========================================
@@ -286,7 +297,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
           setEditForm(emptyProfile);
           setMyAvatar(null);
           setOwnProfileLoadStatus('error');
-          setOwnProfileLoadError('目前無法載入個人檔案，請稍後再試。');
+          setOwnProfileLoadError(t('error.profileLoad', '目前無法載入個人檔案，請稍後再試。'));
         }
       }
     };
@@ -296,7 +307,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
     return () => {
       isMounted = false;
     };
-  }, [user?.id, profileReloadToken, setMyAvatar]);
+  }, [t, user?.id, profileReloadToken, setMyAvatar]);
 
   // ==========================================
   // 業務邏輯：檔案轉換與 AI 審核
@@ -356,10 +367,10 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       if (error) throw error;
 
       const reloaded = await loadOwnLocationStatus();
-      setLocationMessage(reloaded ? '位置已更新。' : '位置已更新，但目前無法重新確認狀態。');
+      setLocationMessage(reloaded ? t('profile.locationUpdated', '位置已更新。') : t('profile.locationUpdatedUnverified', '位置已更新，但目前無法重新確認狀態。'));
     } catch (error) {
       console.error('更新位置失敗:', error);
-      setLocationMessage('無法更新位置，請稍後再試。');
+      setLocationMessage(t('profile.locationUpdateError', '無法更新位置，請稍後再試。'));
     } finally {
       setLocationAction('idle');
     }
@@ -367,12 +378,12 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
   const handleLocationUpdate = () => {
     if (!user?.id) {
-      setLocationMessage('請先登入後再更新位置。');
+      setLocationMessage(t('profile.loginRequired', '請先登入後再使用此功能。'));
       return;
     }
 
     if (!navigator.geolocation) {
-      setLocationMessage('此瀏覽器不支援位置服務。');
+      setLocationMessage(t('profile.locationBrowserUnavailable', '此瀏覽器不支援位置服務。'));
       return;
     }
 
@@ -384,11 +395,11 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       },
       (error) => {
         const messageByCode: Record<number, string> = {
-          1: '位置權限遭拒絕。',
-          2: '目前無法取得位置。',
-          3: '取得位置逾時，請稍後再試。',
+          1: t('profile.locationDenied', '位置權限遭拒絕。'),
+          2: t('profile.locationUnavailable', '目前無法取得位置。'),
+          3: t('profile.locationTimeout', '取得位置逾時，請稍後再試。'),
         };
-        setLocationMessage(messageByCode[error.code] ?? '無法取得位置，請稍後再試。');
+        setLocationMessage(messageByCode[error.code] ?? t('profile.locationUnavailable', '目前無法取得位置。'));
         setLocationAction('idle');
       },
       {
@@ -401,7 +412,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
   const handleLocationClear = async () => {
     if (!user?.id) {
-      setLocationMessage('請先登入後再清除位置。');
+      setLocationMessage(t('profile.loginRequired', '請先登入後再使用此功能。'));
       return;
     }
 
@@ -412,10 +423,10 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       if (error) throw error;
 
       const reloaded = await loadOwnLocationStatus();
-      setLocationMessage(reloaded ? '位置已清除。' : '位置已清除，但目前無法重新確認狀態。');
+      setLocationMessage(reloaded ? t('privacy.clearLocation', '清除位置') : t('profile.locationUpdatedUnverified', '位置已更新，但目前無法重新確認狀態。'));
     } catch (error) {
       console.error('清除位置失敗:', error);
-      setLocationMessage('無法清除位置，請稍後再試。');
+      setLocationMessage(t('profile.locationClearError', '無法清除位置，請稍後再試。'));
     } finally {
       setLocationAction('idle');
     }
@@ -475,7 +486,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
       if (!isSafe) {
         // ✅ 改进：显示高质感 VIP 弹窗而非 alert
-        alert('⚠️ 系統攔截：公開相片不可包含裸露或色情內容。若要上傳私密相片，請解鎖 VIP 私人相簿功能。');
+        alert(t('profile.publicPhotoReviewHint', '為維護社群環境，系統正在分析相片內容'));
         requestVipUpgrade();
         if (fileRef.current) fileRef.current.value = '';
         return;
@@ -493,7 +504,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         });
       }
     } catch {
-      alert('圖片處理失敗，請重試。');
+      alert(t('profile.imageProcessingError', '圖片處理失敗，請重試。'));
     } finally {
       setIsAnalyzing(false);
     }
@@ -511,7 +522,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         setReportAttachment(dataUrl);
       }
     } catch {
-      alert('圖片處理失敗');
+      alert(t('profile.imageProcessingError', '圖片處理失敗，請重試。'));
     }
     if (target === 'contact' && contactFileRef.current) contactFileRef.current.value = '';
     if (target === 'report' && reportFileRef.current) reportFileRef.current.value = '';
@@ -581,10 +592,10 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
   async function handleSaveProfile() {
     if (!isValidProfileName(editForm.name)) {
-      return alert('名稱僅能使用中文或英文；中文最多 7 字，英文最多 14 字，且不可包含空白或特殊符號。');
+      return alert(t('profile.nameValidationError', '名稱僅能使用中文或英文；中文最多 7 字，英文最多 14 字，且不可包含空白或特殊符號。'));
     }
-    if (editForm.lookingFor.length === 0) return alert('請至少選擇一個尋找目標！');
-    if (editForm.role.length === 0) return alert('請至少選擇一個角色偏好！');
+    if (editForm.lookingFor.length === 0) return alert(t('profile.lookingForRequired', '請至少選擇一個尋找目標！'));
+    if (editForm.role.length === 0) return alert(t('profile.roleRequired', '請至少選擇一個角色偏好！'));
 
     const previousProfile = profile;
     const previousAvatar = myAvatar;
@@ -599,7 +610,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       window.dispatchEvent(new CustomEvent('gpulse-profile-updated'));
       if (!saveResult.privatePhotosSaved) {
         setProfile({ ...nextProfile, privatePhotos: previousProfile.privatePhotos });
-        alert('公開個人檔案已儲存，但私密相簿儲存失敗。請檢查網路後重試私密相簿。');
+        alert(t('profile.privateSaveError', '公開個人檔案已儲存，但私密相簿儲存失敗。請檢查網路後重試私密相簿。'));
         return;
       }
       setIsEditModalOpen(false);
@@ -607,7 +618,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       console.error('儲存個人檔案失敗:', error);
       setProfile(previousProfile);
       if (previousAvatar !== myAvatar) setMyAvatar(previousAvatar);
-      alert('檔案儲存失敗，已還原上一版資料。');
+      alert(t('profile.saveError', '檔案儲存失敗，已還原上一版資料。'));
     }
   }
 
@@ -630,7 +641,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       URL.revokeObjectURL(url);
       
       setIsDownloading(false);
-      alert('✅ 資料備份檔 (.json) 已成功下載至您的裝置！');
+      alert(t('profile.downloadSuccess', '資料備份檔（.json）已成功下載至您的裝置！'));
     }, 1500);
   };
 
@@ -689,9 +700,9 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
           <Scan className="w-12 h-12 text-violet-500 animate-pulse mb-4" />
           <div className="flex items-center gap-2">
             <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
-            <span className="text-violet-300 font-medium">公開相片安全審核中...</span>
+            <span className="text-violet-300 font-medium">{t('profile.publicPhotoReview', '公開相片安全審核中…')}</span>
           </div>
-          <p className="text-slate-500 text-xs mt-2">為維護社群環境，系統正在分析相片內容</p>
+          <p className="text-slate-500 text-xs mt-2">{t('profile.publicPhotoReviewHint', '為維護社群環境，系統正在分析相片內容')}</p>
         </div>
       )}
 
@@ -892,10 +903,10 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-full duration-300">
           <div className="flex items-center justify-between px-4 py-4 bg-slate-950 border-b border-white/10 shrink-0">
-            <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white px-2 py-1 font-medium">取消</button>
-            <h2 className="text-white font-bold text-lg">編輯檔案</h2>
+            <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white px-2 py-1 font-medium">{t('common.cancel', '取消')}</button>
+            <h2 className="text-white font-bold text-lg">{t('profile.editTitle', '編輯檔案')}</h2>
             <button onClick={handleSaveProfile} className="text-violet-400 font-bold hover:text-violet-300 px-2 py-1 flex items-center gap-1 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white rounded-lg py-2 px-3 transition-all shadow-lg shadow-violet-500/20">
-              <Check className="w-4 h-4" /> 儲存
+              <Check className="w-4 h-4" /> {t('common.save', '儲存')}
             </button>
           </div>
 
@@ -905,7 +916,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               
               <div>
                 <h4 className="text-slate-300 text-sm font-semibold mb-3 flex items-center justify-between relative z-10">
-                  <span className="flex items-center gap-2"><ImageIcon className="w-4 h-4 text-sky-400"/> 公開相片 <span className="text-[10px] text-sky-400/60 font-normal">(嚴格審核)</span></span>
+                  <span className="flex items-center gap-2"><ImageIcon className="w-4 h-4 text-sky-400"/> {t('profile.publicPhotos', '公開相片')} <span className="text-[10px] text-sky-400/60 font-normal">({t('profile.strictReview', '嚴格審核')})</span></span>
                   <span className="text-xs text-slate-500">{editForm.publicPhotos.length} / 3</span>
                 </h4>
                 <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar relative z-10">
@@ -925,8 +936,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
               <div>
                 <h4 className="text-slate-300 text-sm font-semibold mb-3 flex items-center justify-between relative z-10">
-                  <span className="flex items-center gap-2"><Lock className="w-4 h-4 text-amber-400"/> 隱私相簿 <span className="text-[10px] text-amber-400/60 font-normal">(免審核)</span></span>
-                  <span className="text-xs text-slate-500">{editForm.privatePhotos.length} / {entitlementStatus === 'ready' ? (hasVipAccess ? '無上限' : '2 (免費)') : '確認中'}</span>
+                  <span className="flex items-center gap-2"><Lock className="w-4 h-4 text-amber-400"/> {t('profile.privateAlbum', '私密相簿')} <span className="text-[10px] text-amber-400/60 font-normal">({t('profile.noReview', '免審核')})</span></span>
+                  <span className="text-xs text-slate-500">{editForm.privatePhotos.length} / {entitlementStatus === 'ready' ? (hasVipAccess ? t('profile.unlimited', '無上限') : t('profile.freeLimit', '2（免費）')) : t('profile.confirming', '確認中')}</span>
                 </h4>
                 <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar relative z-10">
                   {editForm.privatePhotos.map((photo, idx) => (
@@ -938,7 +949,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                   ))}
                   <div onClick={(e) => { e.stopPropagation(); triggerPhotoUpload('private'); }} className="shrink-0 w-24 h-32 rounded-xl bg-amber-950/20 border-2 border-dashed border-amber-500/30 flex flex-col items-center justify-center cursor-pointer hover:bg-amber-900/30 transition-colors relative overflow-hidden">
                     {entitlementStatus === 'ready' && !hasVipAccess && editForm.privatePhotos.length >= 2 ? <Crown className="w-6 h-6 text-amber-500 mb-1" /> : <Plus className="w-6 h-6 text-amber-500/70 mb-1" />}
-                    <span className="text-[10px] text-amber-500/70 font-medium px-1 text-center">{entitlementStatus !== 'ready' ? '資格確認中' : !hasVipAccess && editForm.privatePhotos.length >= 2 ? '解鎖 VIP' : '新增相片'}</span>
+                    <span className="text-[10px] text-amber-500/70 font-medium px-1 text-center">{entitlementStatus !== 'ready' ? t('profile.checkingEntitlement', '資格確認中') : !hasVipAccess && editForm.privatePhotos.length >= 2 ? t('profile.unlockVip', '解鎖 VIP') : t('profile.addPhoto', '新增照片')}</span>
                   </div>
                 </div>
               </div>
@@ -947,35 +958,35 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             <div className="bg-slate-950 border border-white/5 rounded-2xl p-4 space-y-5">
               <div className="flex gap-4">
                 <div className="flex-2">
-                  <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><User className="w-3.5 h-3.5" />名稱</label>
+                  <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><User className="w-3.5 h-3.5" />{t('profile.name', '名稱')}</label>
                   <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} maxLength={14} pattern="[A-Za-z\u4E00-\u9FFF]+" aria-invalid={Boolean(editForm.name) && !isValidProfileName(editForm.name)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none" />
-                  {editForm.name && !isValidProfileName(editForm.name) && <p className="mt-1 text-xs text-rose-400">僅限中文（最多 7 字）或英文（最多 14 字），不可混用空白或特殊符號。</p>}
+                  {editForm.name && !isValidProfileName(editForm.name) && <p className="mt-1 text-xs text-rose-400">{t('profile.nameRule', '僅限中文（最多 7 字）或英文（最多 14 字），不可混用空白或特殊符號。')}</p>}
                 </div>
                 <div className="flex-1">
-                  <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Calendar className="w-3.5 h-3.5" />年齡</label>
+                  <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Calendar className="w-3.5 h-3.5" />{t('profile.age', '年齡')}</label>
                   <input type="number" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none" />
                 </div>
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Ruler className="w-3.5 h-3.5" />身高 (cm)</label>
+                  <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Ruler className="w-3.5 h-3.5" />{t('profile.heightCm', '身高（cm）')}</label>
                   <input type="number" value={editForm.height} onChange={(e) => setEditForm({ ...editForm, height: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none" placeholder="175" />
                 </div>
                 <div className="flex-1">
-                  <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Scale className="w-3.5 h-3.5" />體重 (kg)</label>
+                  <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Scale className="w-3.5 h-3.5" />{t('profile.weightKg', '體重（kg）')}</label>
                   <input type="number" value={editForm.weight} onChange={(e) => setEditForm({ ...editForm, weight: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none" placeholder="65" />
                 </div>
               </div>
               <div>
-                <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><AlignLeft className="w-3.5 h-3.5" />關於我</label>
-                <textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })} rows={4} placeholder="介紹一下你自己吧..." className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none resize-none" />
+                <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><AlignLeft className="w-3.5 h-3.5" />{t('profile.aboutMe', '關於我')}</label>
+                <textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })} rows={4} placeholder={t('profile.bioPlaceholder', '介紹一下你自己吧…')} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none resize-none" />
               </div>
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl p-4 space-y-5">
               
               <div>
-                <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-3"><Crown className="w-3.5 h-3.5" />所屬族群 (單選)</label>
+                <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-3"><Crown className="w-3.5 h-3.5" />{t('profile.tribe', '所屬族群')} ({t('profile.singleSelect', '單選')})</label>
                 <div className="flex flex-wrap gap-2">
                   {TRIBE_OPTIONS.map((option) => (
                     <button 
@@ -996,10 +1007,10 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               <div className="h-px bg-white/5 w-full"></div>
 
               <div>
-                <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-3"><VenetianMask className="w-3.5 h-3.5" />角色偏好 (可多選)</label>
+                <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-3"><VenetianMask className="w-3.5 h-3.5" />{t('profile.rolePreference', '角色偏好')} ({t('profile.multiSelect', '可多選')})</label>
                 <div className="flex flex-wrap gap-2">
                   {ROLE_OPTIONS.map((option) => (
-                    <button key={option} onClick={() => toggleArraySelection('role', option)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${editForm.role.includes(option) ? 'bg-sky-600 text-white shadow-lg shadow-sky-500/30' : 'bg-slate-950 text-slate-400 border border-slate-700'}`}>{option}</button>
+                    <button key={option} onClick={() => toggleArraySelection('role', option)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${editForm.role.includes(option) ? 'bg-sky-600 text-white shadow-lg shadow-sky-500/30' : 'bg-slate-950 text-slate-400 border border-slate-700'}`}>{optionLabelByValue[option] ?? option}</button>
                   ))}
                 </div>
               </div>
@@ -1007,17 +1018,17 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               <div className="h-px bg-white/5 w-full"></div>
               
               <div>
-                <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-3"><Heart className="w-3.5 h-3.5" />尋找目標 (可多選)</label>
+                <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-3"><Heart className="w-3.5 h-3.5" />{t('profile.lookingFor', '尋找')} ({t('profile.multiSelect', '可多選')})</label>
                 <div className="flex flex-wrap gap-2">
                   {LOOKING_FOR_OPTIONS.map((option) => (
-                    <button key={option} onClick={() => toggleArraySelection('lookingFor', option)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${editForm.lookingFor.includes(option) ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/30' : 'bg-slate-950 text-slate-400 border border-slate-700'}`}>{option}</button>
+                    <button key={option} onClick={() => toggleArraySelection('lookingFor', option)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${editForm.lookingFor.includes(option) ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/30' : 'bg-slate-950 text-slate-400 border border-slate-700'}`}>{optionLabelByValue[option] ?? option}</button>
                   ))}
                 </div>
               </div>
             </div>
 
             <div className="rounded-2xl border border-white/5 bg-slate-950 p-4">
-              <p className="text-xs text-slate-400">社群連結尚未有可用的個人檔案資料契約，因此目前不提供儲存欄位。</p>
+              <p className="text-xs text-slate-400">{t('profile.socialUnavailable', '社群連結尚未有可用的個人檔案資料契約，因此目前不提供儲存欄位。')}</p>
             </div>
           </div>
         </div>
@@ -1030,49 +1041,49 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in slide-in-from-right duration-300">
           <div className="flex items-center justify-between px-4 py-4 bg-slate-950 border-b border-white/10 shrink-0">
             <button onClick={() => setIsNotificationModalOpen(false)} className="text-slate-400 hover:text-white px-2 py-1"><ChevronRight className="w-6 h-6 rotate-180" /></button>
-            <h2 className="text-white font-bold text-lg">通知設定</h2>
+            <h2 className="text-white font-bold text-lg">{t('settings.notificationTitle', '通知設定')}</h2>
             <div className="w-10"></div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
             <div className="bg-slate-950 border border-white/5 rounded-2xl divide-y divide-white/5">
               <div className="px-4 py-5 flex items-center justify-between">
                 <div>
-                  <h4 className="text-white font-medium text-sm flex items-center gap-2"><Heart className="w-4 h-4 text-pink-500" /> 新的配對</h4>
-                  <p className="text-slate-400 text-xs mt-1">有人與您互相喜歡時通知</p>
+                  <h4 className="text-white font-medium text-sm flex items-center gap-2"><Heart className="w-4 h-4 text-pink-500" /> {t('settings.newMatch', '新的配對')}</h4>
+                  <p className="text-slate-400 text-xs mt-1">{t('settings.newMatchHint', '有人與您互相喜歡時通知')}</p>
                 </div>
-                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
+                <span className="text-xs text-slate-500">{t('settings.backendUnavailable', '尚未提供後端偏好設定')}</span>
               </div>
               <div className="px-4 py-5 flex items-center justify-between">
                 <div>
-                  <h4 className="text-white font-medium text-sm flex items-center gap-2"><MessageCircle className="w-4 h-4 text-blue-400" /> 新的訊息</h4>
-                  <p className="text-slate-400 text-xs mt-1">收到新聊天訊息時通知</p>
+                  <h4 className="text-white font-medium text-sm flex items-center gap-2"><MessageCircle className="w-4 h-4 text-blue-400" /> {t('settings.newMessage', '新的訊息')}</h4>
+                  <p className="text-slate-400 text-xs mt-1">{t('settings.newMessageHint', '收到新聊天訊息時通知')}</p>
                 </div>
-                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
+                <span className="text-xs text-slate-500">{t('settings.backendUnavailable', '尚未提供後端偏好設定')}</span>
               </div>
               <div className="px-4 py-5 flex items-center justify-between opacity-80">
                 <div>
-                  <h4 className="text-white font-medium text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-violet-400" /> 誰來看我 (VIP)</h4>
-                  <p className="text-slate-400 text-xs mt-1">有人瀏覽您的檔案時通知</p>
+                  <h4 className="text-white font-medium text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-violet-400" /> {t('settings.profileViews', '誰來看我（VIP）')}</h4>
+                  <p className="text-slate-400 text-xs mt-1">{t('settings.profileViewsHint', '有人瀏覽您的檔案時通知')}</p>
                 </div>
-                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
+                <span className="text-xs text-slate-500">{t('settings.backendUnavailable', '尚未提供後端偏好設定')}</span>
               </div>
             </div>
 
-            <h3 className="text-white/40 text-xs font-semibold uppercase tracking-wider ml-1">系統與行銷</h3>
+            <h3 className="text-white/40 text-xs font-semibold uppercase tracking-wider ml-1">{t('settings.systemMarketing', '系統與行銷')}</h3>
             <div className="bg-slate-950 border border-white/5 rounded-2xl divide-y divide-white/5">
               <div className="px-4 py-5 flex items-center justify-between">
                 <div>
-                  <h4 className="text-white font-medium text-sm">系統公告</h4>
-                  <p className="text-slate-400 text-xs mt-1">重大更新與維護通知</p>
+                  <h4 className="text-white font-medium text-sm">{t('settings.announcements', '系統公告')}</h4>
+                  <p className="text-slate-400 text-xs mt-1">{t('settings.announcementsHint', '重大更新與維護通知')}</p>
                 </div>
-                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
+                <span className="text-xs text-slate-500">{t('settings.backendUnavailable', '尚未提供後端偏好設定')}</span>
               </div>
               <div className="px-4 py-5 flex items-center justify-between">
                 <div>
-                  <h4 className="text-white font-medium text-sm">優惠活動信件</h4>
-                  <p className="text-slate-400 text-xs mt-1">接收 VIP 促銷與活動 Email</p>
+                  <h4 className="text-white font-medium text-sm">{t('settings.promotions', '優惠活動信件')}</h4>
+                  <p className="text-slate-400 text-xs mt-1">{t('settings.promotionsHint', '接收 VIP 促銷與活動 Email')}</p>
                 </div>
-                <span className="text-xs text-slate-500">尚未提供後端偏好設定</span>
+                <span className="text-xs text-slate-500">{t('settings.backendUnavailable', '尚未提供後端偏好設定')}</span>
               </div>
             </div>
           </div>
@@ -1086,7 +1097,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in slide-in-from-right duration-300">
           <div className="flex items-center justify-between px-4 py-4 bg-slate-950 border-b border-white/10 shrink-0">
             <button onClick={() => setIsPrivacyModalOpen(false)} className="text-slate-400 hover:text-white px-2 py-1"><ChevronRight className="w-6 h-6 rotate-180" /></button>
-            <h2 className="text-white font-bold text-lg">隱私設定</h2>
+            <h2 className="text-white font-bold text-lg">{t('privacy.title', '隱私設定')}</h2>
             <div className="w-10"></div>
           </div>
           
@@ -1094,16 +1105,16 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             <div className="bg-slate-950 border border-amber-500/20 rounded-2xl overflow-hidden">
               <div className="bg-amber-950/30 px-4 py-3 border-b border-amber-500/10 flex justify-between items-center">
                 <h4 className="text-amber-500 text-sm font-bold flex items-center gap-2">
-                  <Lock className="w-4 h-4" /> 私密相簿權限管理
+                  <Lock className="w-4 h-4" /> {t('privacy.albumAccess', '私密相簿權限管理')}
                 </h4>
               </div>
-              <p className="p-6 text-center text-xs leading-5 text-slate-500">存取申請、核准與撤銷需要後端授權契約；目前尚未開放，沒有任何權限變更會在此畫面執行。</p>
+              <p className="p-6 text-center text-xs leading-5 text-slate-500">{t('privacy.albumAccessHint', '存取申請、核准與撤銷需要後端授權契約；目前尚未開放，沒有任何權限變更會在此畫面執行。')}</p>
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5 flex items-center justify-between">
               <div>
-                <h4 className="text-white font-medium text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400" /> 隱藏精確距離</h4>
-                <p className="text-slate-400 text-xs mt-1">開啟後，別人不會收到你的距離區間。</p>
+                <h4 className="text-white font-medium text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400" /> {t('privacy.hideDistance', '隱藏精確距離')}</h4>
+                <p className="text-slate-400 text-xs mt-1">{t('privacy.hideDistanceHint', '開啟後，別人不會收到你的距離區間。')}</p>
               </div>
               <ToggleSwitch isOn={profile.hideDistance} onToggle={() => handleVipToggle(!profile.hideDistance)} />
             </div>
@@ -1111,13 +1122,13 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h4 className="text-white font-medium text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-violet-300" /> 位置距離</h4>
+                <h4 className="text-white font-medium text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-violet-300" /> {t('privacy.location', '位置距離')}</h4>
                   <p className="text-slate-400 text-xs mt-1">
-                    {ownLocationStatus === 'loading' && '正在確認已儲存的位置狀態。'}
-                    {ownLocationStatus === 'not-enabled' && '未啟用位置。'}
-                    {ownLocationStatus === 'fresh' && '已啟用位置，狀態有效。'}
-                    {ownLocationStatus === 'stale' && '已啟用位置，但位置已過期；請手動更新。'}
-                    {ownLocationStatus === 'error' && '目前無法確認位置狀態。'}
+                    {ownLocationStatus === 'loading' && t('privacy.locationLoading', '正在確認已儲存的位置狀態。')}
+                    {ownLocationStatus === 'not-enabled' && t('privacy.locationDisabled', '未啟用位置。')}
+                    {ownLocationStatus === 'fresh' && t('privacy.locationFresh', '已啟用位置，狀態有效。')}
+                    {ownLocationStatus === 'stale' && t('privacy.locationStale', '已啟用位置，但位置已過期；請手動更新。')}
+                    {ownLocationStatus === 'error' && t('privacy.locationError', '目前無法確認位置狀態。')}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col gap-2">
@@ -1127,7 +1138,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                     disabled={locationAction !== 'idle'}
                     className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {locationAction === 'updating' ? '更新中…' : ownLocationStatus === 'not-enabled' ? '啟用位置' : '更新位置'}
+                    {locationAction === 'updating' ? t('privacy.updatingLocation', '更新中…') : ownLocationStatus === 'not-enabled' ? t('privacy.enableLocation', '啟用位置') : t('privacy.updateLocation', '更新位置')}
                   </button>
                   <button
                     type="button"
@@ -1135,7 +1146,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                     disabled={locationAction !== 'idle' || ownLocationStatus === 'not-enabled'}
                     className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {locationAction === 'clearing' ? '清除中…' : '清除位置'}
+                    {locationAction === 'clearing' ? t('privacy.clearingLocation', '清除中…') : t('privacy.clearLocation', '清除位置')}
                   </button>
                 </div>
               </div>
@@ -1144,32 +1155,32 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5 flex items-center justify-between">
               <div>
-                <h4 className="text-white font-medium text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-violet-400" /> 旅行模式</h4>
-                <p className="text-slate-400 text-xs mt-1">切換到旅行風格偏好，讓他人看到你的旅遊狀態。</p>
+                <h4 className="text-white font-medium text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-violet-400" /> {t('privacy.travelMode', '旅行模式')}</h4>
+                <p className="text-slate-400 text-xs mt-1">{t('privacy.travelModeHint', '切換到旅行風格偏好，讓他人看到你的旅遊狀態。')}</p>
               </div>
-              <span className="text-xs text-slate-500">尚未提供伺服器設定</span>
+              <span className="text-xs text-slate-500">{t('privacy.serverUnavailable', '尚未提供伺服器設定')}</span>
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl px-4 py-5 flex items-center justify-between">
               <div>
-                <h4 className="text-white font-medium text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-sky-400" /> 反悔跳過</h4>
-                <p className="text-slate-400 text-xs mt-1">啟用後可在快速滑動中回復上一位候選人。</p>
+                <h4 className="text-white font-medium text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-sky-400" /> {t('privacy.rewind', '反悔跳過')}</h4>
+                <p className="text-slate-400 text-xs mt-1">{t('privacy.rewindHint', '啟用後可在快速滑動中回復上一位候選人。')}</p>
               </div>
-              <span className="text-xs text-slate-500">功能尚未開放</span>
+              <span className="text-xs text-slate-500">{t('privacy.featureUnavailable', '功能尚未開放')}</span>
             </div>
 
             <div className="bg-slate-950 border border-white/5 rounded-2xl p-4">
-              <h4 className="text-white font-medium text-sm mb-1">資料下載與備份</h4>
-              <p className="text-slate-400 text-xs mb-3">您可以匯出並下載您在 App 內的所有活動紀錄與個人資料備份。</p>
+              <h4 className="text-white font-medium text-sm mb-1">{t('privacy.downloadTitle', '資料下載與備份')}</h4>
+              <p className="text-slate-400 text-xs mb-3">{t('privacy.downloadHint', '您可以匯出並下載您在 App 內的所有活動紀錄與個人資料備份。')}</p>
               <button 
                 onClick={handleDownloadData}
                 disabled={isDownloading}
                 className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white text-sm font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isDownloading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> 打包資料中...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> {t('privacy.downloading', '打包資料中…')}</>
                 ) : (
-                  <><Download className="w-4 h-4" /> 下載我的資料</>
+                  <><Download className="w-4 h-4" /> {t('privacy.download', '下載我的資料')}</>
                 )}
               </button>
             </div>
@@ -1184,7 +1195,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in slide-in-from-right duration-300">
           <div className="flex items-center justify-between px-4 py-4 bg-slate-950 border-b border-white/10 shrink-0">
             <button onClick={() => setIsHelpModalOpen(false)} className="text-slate-400 hover:text-white px-2 py-1"><ChevronRight className="w-6 h-6 rotate-180" /></button>
-            <h2 className="text-white font-bold text-lg">幫助與支援</h2>
+            <h2 className="text-white font-bold text-lg">{t('help.title', '幫助與支援')}</h2>
             <div className="w-10"></div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -1193,29 +1204,28 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               <div className="w-12 h-12 rounded-full bg-violet-500/20 flex items-center justify-center mb-3">
                 <HelpCircle className="w-6 h-6 text-violet-400" />
               </div>
-              <h3 className="text-white font-bold mb-1">需要協助嗎？</h3>
+              <h3 className="text-white font-bold mb-1">{t('help.needHelp', '需要協助嗎？')}</h3>
               <p className="text-slate-400 text-xs mb-4 leading-relaxed">
-                建議您先查閱下方的常見問題。<br/>
-                若仍需專人協助，我們將於 <span className="text-violet-400 font-medium">1-3 個工作天</span> 內回覆。
+                {t('help.intro', '建議您先查閱下方的常見問題。若仍需專人協助，我們將於 1–3 個工作天內回覆。')}
               </p>
               <button 
                 onClick={() => setContactFormOpen(true)}
                 className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 mt-4 shadow-lg shadow-violet-500/20"
               >
-                <MessageSquare className="w-4 h-4" /> 聯絡客服
+                <MessageSquare className="w-4 h-4" /> {t('help.contact', '聯絡客服')}
               </button>
             </div>
 
             <div>
               <h3 className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
-                <ShieldAlert className="w-3.5 h-3.5 text-red-400" /> 安全與檢舉中心
+                <ShieldAlert className="w-3.5 h-3.5 text-red-400" /> {t('help.safety', '安全與檢舉中心')}
               </h3>
               <div className="bg-slate-950 border border-white/5 rounded-2xl divide-y divide-white/5">
                 {[
-                  { label: '照片含有裸露或色情內容', icon: <EyeOff className="w-4 h-4 text-pink-400" /> },
-                  { label: '疑似詐騙或假帳號', icon: <AlertOctagon className="w-4 h-4 text-amber-400" /> },
-                  { label: '言語騷擾或仇恨言論', icon: <VenetianMask className="w-4 h-4 text-purple-400" /> },
-                  { label: '檢舉未成年用戶', icon: <UserX className="w-4 h-4 text-blue-400" /> },
+                  { label: t('help.reportNudity', '照片含有裸露或色情內容'), icon: <EyeOff className="w-4 h-4 text-pink-400" /> },
+                  { label: t('help.reportScam', '疑似詐騙或假帳號'), icon: <AlertOctagon className="w-4 h-4 text-amber-400" /> },
+                  { label: t('help.reportHarassment', '言語騷擾或仇恨言論'), icon: <VenetianMask className="w-4 h-4 text-purple-400" /> },
+                  { label: t('help.reportMinor', '檢舉未成年用戶'), icon: <UserX className="w-4 h-4 text-blue-400" /> },
                 ].map((item, idx) => (
                   <button 
                     key={idx}
@@ -1233,12 +1243,12 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             </div>
 
             <div className="pb-8">
-              <h3 className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-3 ml-1">常見問題 (FAQ)</h3>
+              <h3 className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-3 ml-1">{t('help.faq', '常見問題（FAQ）')}</h3>
               <div className="bg-slate-950 border border-white/5 rounded-2xl divide-y divide-white/5">
                 {[
-                  { q: '如何獲得藍色勾勾認證？', a: '請至個人檔案主頁，點擊「開始活體認證」，按照畫面指示完成臉部掃描，審核通過後即可獲得藍色勾勾。' },
-                  { q: '私密相簿是什麼？如何開啟？', a: '私密相簿是提供給用戶上傳不對外公開相片的空間。VIP 用戶可享無上限容量。其他人必須透過聊天室向您發送請求，經您允許後才能觀看。' },
-                  { q: 'VIP 訂閱可以隨時取消嗎？', a: '可以的，您可以隨時在 Apple App Store 或 Google Play 的訂閱設定中取消。取消後，VIP 資格將持續到當前計費週期結束。' },
+                  { q: t('help.faqVerificationQ', '如何獲得藍色勾勾認證？'), a: t('help.faqVerificationA', '認證功能目前未開放，請勿將未提供的認證流程視為可用服務。') },
+                  { q: t('help.faqAlbumQ', '私密相簿是什麼？'), a: t('help.faqAlbumA', '私密相簿用於保存不公開相片。查看權限僅能透過目前可用的私密相簿授權流程管理。') },
+                  { q: t('help.faqVipQ', '如何取得 VIP？'), a: t('help.faqVipA', '訂閱與付款目前尚未開放；本服務不會在此建立 VIP 資格。') },
                 ].map((faq, idx) => (
                   <div key={idx} className="overflow-hidden">
                     <button onClick={() => setExpandedFaq(expandedFaq === idx ? null : idx)} className="w-full text-left px-4 py-4 flex items-center justify-between hover:bg-white/5 transition-colors">
@@ -1260,13 +1270,13 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       {contactFormOpen && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4">
           <div className="bg-slate-950 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-200">
-            <h3 className="text-white font-bold text-lg mb-1">聯絡客服團隊</h3>
-            <p className="text-slate-400 text-xs mb-5">請詳細描述您遇到的問題，我們將盡速為您處理。</p>
+            <h3 className="text-white font-bold text-lg mb-1">{t('help.contactTitle', '聯絡客服團隊')}</h3>
+            <p className="text-slate-400 text-xs mb-5">{t('help.contactHint', '請詳細描述您遇到的問題，我們將盡速為您處理。')}</p>
             
             <textarea 
               value={contactMessage}
               onChange={(e) => setContactMessage(e.target.value)}
-              placeholder="請輸入您的問題..."
+              placeholder={t('help.contactPlaceholder', '請輸入您的問題…')}
               rows={4}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all resize-none mb-4"
             />
@@ -1281,9 +1291,9 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             )}
 
             <div className="flex items-center gap-3">
-              <button onClick={() => contactFileRef.current?.click()} className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" title="附上截圖"><ImagePlus className="w-5 h-5" /></button>
-              <button onClick={() => { setContactFormOpen(false); setContactMessage(''); setContactAttachment(null); }} className="flex-1 py-2.5 rounded-xl font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 transition-colors">取消</button>
-              <button onClick={submitContactForm} className="flex-1 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 transition-all shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2"><Send className="w-4 h-4" /> 送出</button>
+              <button onClick={() => contactFileRef.current?.click()} className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" title={t('help.attachScreenshot', '附上截圖')}><ImagePlus className="w-5 h-5" /></button>
+              <button onClick={() => { setContactFormOpen(false); setContactMessage(''); setContactAttachment(null); }} className="flex-1 py-2.5 rounded-xl font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 transition-colors">{t('common.cancel', '取消')}</button>
+              <button onClick={submitContactForm} className="flex-1 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 transition-all shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2"><Send className="w-4 h-4" /> {t('common.send', '送出')}</button>
             </div>
           </div>
         </div>
@@ -1294,14 +1304,14 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
           <div className="bg-slate-950 border border-red-900/50 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-2 mb-1">
               <AlertTriangle className="w-5 h-5 text-red-500" />
-              <h3 className="text-white font-bold text-lg">提交檢舉</h3>
+              <h3 className="text-white font-bold text-lg">{t('help.reportTitle', '提交檢舉')}</h3>
             </div>
-            <p className="text-slate-400 text-xs mb-4">檢舉原因：<span className="text-red-400 font-medium">{reportFormState.reason}</span></p>
+            <p className="text-slate-400 text-xs mb-4">{t('help.reportReason', '檢舉原因：')}<span className="text-red-400 font-medium">{reportFormState.reason}</span></p>
             
             <textarea 
               value={reportFormState.details}
               onChange={(e) => setReportFormState({...reportFormState, details: e.target.value})}
-              placeholder="請詳細描述發生了什麼事，幫助我們的團隊更快進行調查..."
+              placeholder={t('help.reportPlaceholder', '請詳細描述發生了什麼事，幫助我們的團隊更快進行調查…')}
               rows={4}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all resize-none mb-4"
             />
@@ -1316,9 +1326,9 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             )}
 
             <div className="flex items-center gap-3">
-              <button onClick={() => reportFileRef.current?.click()} className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" title="附上證據截圖"><ImagePlus className="w-5 h-5" /></button>
-              <button onClick={() => { setReportFormState({ isOpen: false, reason: '', details: '' }); setReportAttachment(null); }} className="flex-1 py-2.5 rounded-xl font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 transition-colors">取消</button>
-              <button onClick={submitReportForm} className="flex-1 py-2.5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-500 transition-all shadow-lg shadow-red-500/20">送出檢舉</button>
+              <button onClick={() => reportFileRef.current?.click()} className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" title={t('help.attachEvidence', '附上證據截圖')}><ImagePlus className="w-5 h-5" /></button>
+              <button onClick={() => { setReportFormState({ isOpen: false, reason: '', details: '' }); setReportAttachment(null); }} className="flex-1 py-2.5 rounded-xl font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 transition-colors">{t('common.cancel', '取消')}</button>
+              <button onClick={submitReportForm} className="flex-1 py-2.5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-500 transition-all shadow-lg shadow-red-500/20">{t('help.reportTitle', '提交檢舉')}</button>
             </div>
           </div>
         </div>

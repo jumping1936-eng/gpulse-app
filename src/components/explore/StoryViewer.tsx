@@ -77,7 +77,7 @@ export default function StoryViewer({ selection, onClose, onViewed, onUnavailabl
       const row = Array.isArray(data) ? data[0] : null;
       if (error) {
         console.error('無法載入限時動態:', error);
-        setErrorMessage('目前無法載入限時動態，請稍後再試。');
+        setErrorMessage(t('stories.loadError', '目前無法載入限時動態，請稍後再試。'));
         setIsLoading(false);
         return;
       }
@@ -99,7 +99,7 @@ export default function StoryViewer({ selection, onClose, onViewed, onUnavailabl
       if (!active) return;
       if (markError) {
         console.error('無法更新限時動態觀看狀態:', markError);
-        setErrorMessage('已開啟動態，但暫時無法更新觀看狀態。');
+        setErrorMessage(t('stories.viewUpdateError', '已開啟動態，但暫時無法更新觀看狀態。'));
         return;
       }
 
@@ -115,7 +115,7 @@ export default function StoryViewer({ selection, onClose, onViewed, onUnavailabl
 
     void loadVisibleStory();
     return () => { active = false; };
-  }, [onUnavailable, onViewed, selection]);
+  }, [onUnavailable, onViewed, selection, t]);
 
   const profile = selection.profile;
   const profilePhoto = getPublicProfilePhoto(profile?.public_photos, profile?.avatar_url);

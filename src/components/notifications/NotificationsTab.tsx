@@ -58,11 +58,11 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
     } catch (err) {
       console.error('🔴 獲取通知失敗:', err);
       setNotifications([]);
-      setErrorMessage('無法載入通知，請稍後再試。');
+      setErrorMessage(t('error.notificationLoad', '無法載入通知，請稍後再試。'));
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [t, user?.id]);
 
   useEffect(() => {
     void fetchNotifications();
@@ -97,14 +97,14 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
         setReadError(null);
       } catch (err) {
         console.error('🔴 無法將通知標示為已讀:', err);
-        setReadError('無法將通知標示為已讀，請稍後再試。');
+        setReadError(t('error.notificationRead', '無法將通知標示為已讀，請稍後再試。'));
       } finally {
         markingReadRef.current = false;
       }
     };
 
     void markLoadedNotificationsRead();
-  }, [notifications, user?.id]);
+  }, [notifications, t, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -244,7 +244,7 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
                 <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-400/30 bg-violet-500/10 text-violet-200 shadow-lg shadow-violet-500/20">
                   <Sparkles className="h-8 w-8" />
                 </div>
-                <p className="text-[11px] uppercase tracking-[0.28em] text-violet-300/75">system status</p>
+                <p className="text-[11px] uppercase tracking-[0.28em] text-violet-300/75">{t('notifications.system', '系統')}</p>
                 <h3 className="mt-3 text-2xl font-bold text-white">{t('notifications.systemEmptyTitle', '訊息中心是空的')}</h3>
                 <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300">{t('notifications.systemEmptyHint', '目前還沒有系統公告或安全更新。')}</p>
               </div>
@@ -263,7 +263,7 @@ export default function NotificationsTab({ onUnreadCountChange }: NotificationsT
                       </div>
                     </div>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-300">{notif.type === 'system' ? '系統已同步更新，帳號與安全狀態正常。' : '重要提醒：請保持個人資料與隱私設定最新。'}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">{notif.type === 'system' ? t('notifications.systemEmptyHint', '目前還沒有系統公告或安全更新。') : t('privacy.hideDistanceHint', '開啟後，別人不會收到你的距離區間。')}</p>
                 </div>
               ))
             )}

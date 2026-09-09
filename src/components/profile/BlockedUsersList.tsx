@@ -113,9 +113,7 @@ export default function BlockedUsersList({ onBack }: Props) {
       <div className="px-5 py-4 shrink-0">
         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
           <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-          <p className="text-red-200/80 text-xs leading-relaxed">
-            被封鎖的使用者將無法查看您的個人檔案、向您發送訊息，或在探索頁面中看到您。解除封鎖後，雙方需重新配對才能再次傳送訊息。
-          </p>
+          <p className="text-red-200/80 text-xs leading-relaxed">{t('block.confirmHint', '對方將無法看到您的個人檔案或聯繫您。')}</p>
         </div>
       </div>
 
@@ -138,7 +136,7 @@ export default function BlockedUsersList({ onBack }: Props) {
                   {/* 資訊 */}
                   <div className="flex flex-col">
                     <span className="text-white font-semibold text-sm">{user.name}</span>
-                    <span className="text-white/40 text-[10px]">封鎖日期: {user.date}</span>
+                    <span className="text-white/40 text-[10px]">{t('block.title', '封鎖名單管理')}: {user.date}</span>
                   </div>
                 </div>
 

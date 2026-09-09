@@ -77,13 +77,13 @@ export default function ProfileModal({ user, onClose }: Props) {
         if (!current) return;
         if (error) {
           setAlbumStatus(null);
-          setAlbumMessage('私密相簿目前無法使用。');
+          setAlbumMessage(t('album.unavailable', '私密相簿目前無法使用。'));
           return;
         }
         setAlbumStatus(typeof data === 'string' ? data : null);
       });
     return () => { current = false; };
-  }, [currentUser?.id, targetId]);
+  }, [currentUser?.id, t, targetId]);
 
   async function handleAlbumRequest() {
     if (!targetId || !currentUser?.id || targetId === currentUser.id || albumLoading) return;
@@ -94,10 +94,10 @@ export default function ProfileModal({ user, onClose }: Props) {
       if (error) throw error;
       const nextStatus = typeof data === 'string' ? data : null;
       setAlbumStatus(nextStatus);
-      setAlbumMessage(nextStatus === 'pending' ? '已送出相簿存取申請。' : nextStatus === 'approved' ? '你已獲准查看此相簿。' : '目前無法重新申請。');
+      setAlbumMessage(nextStatus === 'pending' ? t('album.requestSent', '已送出相簿存取申請。') : nextStatus === 'approved' ? t('album.approvalReceived', '你已獲准查看此相簿。') : t('album.requestUnavailable', '目前無法重新申請。'));
     } catch (error) {
       console.error('私密相簿申請失敗:', error);
-      setAlbumMessage('私密相簿目前無法使用。');
+      setAlbumMessage(t('album.unavailable', '私密相簿目前無法使用。'));
     } finally {
       setAlbumLoading(false);
     }
@@ -113,7 +113,7 @@ export default function ProfileModal({ user, onClose }: Props) {
       setAlbumPhotos(Array.isArray(data) ? data.filter((photo): photo is string => typeof photo === 'string') : []);
     } catch (error) {
       console.error('載入私密相簿失敗:', error);
-      setAlbumMessage('私密相簿目前無法使用。');
+      setAlbumMessage(t('album.unavailable', '私密相簿目前無法使用。'));
     } finally {
       setAlbumLoading(false);
     }
@@ -136,22 +136,22 @@ export default function ProfileModal({ user, onClose }: Props) {
 
   async function handleLike() {
     if (!targetId || !currentUser?.id) {
-      setInteractionMessage('請先登入後再傳送心動。');
+      setInteractionMessage(t('interaction.loginToLike', '請先登入後再傳送心動。'));
       setInteractionMessageIsError(true);
       return;
     }
     if (targetId === currentUser.id) {
-      setInteractionMessage('你無法對自己傳送心動。');
+      setInteractionMessage(t('interaction.selfLike', '你無法對自己傳送心動。'));
       setInteractionMessageIsError(true);
       return;
     }
     if (blockListStatus !== 'ready') {
-      setInteractionMessage('正在確認封鎖名單，暫時無法互動。');
+      setInteractionMessage(t('interaction.blockChecking', '正在確認封鎖名單，暫時無法互動。'));
       setInteractionMessageIsError(true);
       return;
     }
     if (blockedUsers.has(targetId)) {
-      setInteractionMessage('你已封鎖此使用者，無法互動。');
+      setInteractionMessage(t('interaction.blocked', '你已封鎖此使用者，無法互動。'));
       setInteractionMessageIsError(true);
       return;
     }
@@ -163,45 +163,45 @@ export default function ProfileModal({ user, onClose }: Props) {
       const result = await sendLikeWithCooldown(targetId);
       if (result === 'in-flight') {
         setLikeState('idle');
-        setInteractionMessage('心動正在送出，請稍候。');
+        setInteractionMessage(t('interaction.likePending', '心動正在送出，請稍候。'));
         setInteractionMessageIsError(false);
         return;
       }
       if (result === 'cooldown') {
         setLikeState('cooldown');
-        setInteractionMessage('你最近已傳送過心動，請 24 小時後再試。');
+        setInteractionMessage(t('interaction.likeCooldown', '你最近已傳送過心動，請 24 小時後再試。'));
         setInteractionMessageIsError(false);
         return;
       }
       setLikeState('sent');
-      setInteractionMessage('心動已送出。');
+      setInteractionMessage(t('interaction.likeSent', '心動已送出。'));
       setInteractionMessageIsError(false);
     } catch (error) {
       console.error('傳送心動失敗:', error);
       setLikeState('error');
-      setInteractionMessage('無法傳送心動，請稍後再試。');
+      setInteractionMessage(t('interaction.likeError', '無法傳送心動，請稍後再試。'));
       setInteractionMessageIsError(true);
     }
   }
 
   async function handleBoost() {
     if (!targetId || !currentUser?.id) {
-      setInteractionMessage('請先登入後再推送。');
+      setInteractionMessage(t('interaction.loginToBoost', '請先登入後再推送。'));
       setInteractionMessageIsError(true);
       return;
     }
     if (targetId === currentUser.id) {
-      setInteractionMessage('你無法推送自己的個人檔案。');
+      setInteractionMessage(t('interaction.selfBoost', '你無法推送自己的個人檔案。'));
       setInteractionMessageIsError(true);
       return;
     }
     if (blockListStatus !== 'ready') {
-      setInteractionMessage('正在確認封鎖名單，暫時無法互動。');
+      setInteractionMessage(t('interaction.blockChecking', '正在確認封鎖名單，暫時無法互動。'));
       setInteractionMessageIsError(true);
       return;
     }
     if (blockedUsers.has(targetId)) {
-      setInteractionMessage('你已封鎖此使用者，無法互動。');
+      setInteractionMessage(t('interaction.blocked', '你已封鎖此使用者，無法互動。'));
       setInteractionMessageIsError(true);
       return;
     }
@@ -213,17 +213,17 @@ export default function ProfileModal({ user, onClose }: Props) {
       const wasSubmitted = await boostUserProfile(targetId);
       if (!wasSubmitted) {
         setBoostState('idle');
-        setInteractionMessage('推送正在送出，請稍候。');
+        setInteractionMessage(t('interaction.boostPending', '推送正在送出，請稍候。'));
         setInteractionMessageIsError(false);
         return;
       }
       setBoostState('sent');
-      setInteractionMessage('推送已送出。');
+      setInteractionMessage(t('interaction.boostSent', '推送已送出。'));
       setInteractionMessageIsError(false);
     } catch (error) {
       console.error('推送失敗:', error);
       setBoostState('error');
-      setInteractionMessage('無法推送，請稍後再試。');
+      setInteractionMessage(t('interaction.boostError', '無法推送，請稍後再試。'));
       setInteractionMessageIsError(true);
     }
   }
@@ -328,7 +328,7 @@ export default function ProfileModal({ user, onClose }: Props) {
               {albumStatus === 'approved' ? <button onClick={() => void handleLoadAlbum()} disabled={albumLoading} className="text-amber-300 text-xs disabled:opacity-50">{t('album.view', '查看')}</button> : <button onClick={() => void handleAlbumRequest()} disabled={albumLoading || !hasInteractionTarget} className="text-amber-300 text-xs disabled:opacity-50">{albumLoading ? t('album.processing', '處理中') : t('album.request', '申請')}</button>}
             </div>
             {albumMessage && <p className="text-xs text-amber-200" role="status">{albumMessage}</p>}
-            {albumPhotos.length > 0 && <div className="grid grid-cols-3 gap-2">{albumPhotos.map((photo) => <img key={photo} src={photo} alt="已授權私密照片" className="aspect-square w-full rounded-xl object-cover" />)}</div>}
+              {albumPhotos.length > 0 && <div className="grid grid-cols-3 gap-2">{albumPhotos.map((photo) => <img key={photo} src={photo} alt={t('album.authorizedPhoto', '已授權私密照片')} className="aspect-square w-full rounded-xl object-cover" />)}</div>}
           </div>
         </div>
 
