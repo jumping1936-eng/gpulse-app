@@ -99,6 +99,10 @@ const languageContextSource = fs.readFileSync(path.join(sourceRoot, 'context', '
 const appTranslationsSource = fs.readFileSync(path.join(sourceRoot, 'i18n', 'appTranslations.ts'), 'utf8');
 const loginScreenSource = fs.readFileSync(path.join(sourceRoot, 'components', 'LoginScreen.tsx'), 'utf8');
 const paywallModalSource = fs.readFileSync(path.join(sourceRoot, 'components', 'PaywallModal.tsx'), 'utf8');
+const appSource = fs.readFileSync(path.join(sourceRoot, 'App.tsx'), 'utf8');
+const brandLogoPath = path.join(sourceRoot, 'components', 'brand', 'GPulseLogo.tsx');
+const brandLogoSource = fs.existsSync(brandLogoPath) ? fs.readFileSync(brandLogoPath, 'utf8') : '';
+const faviconPath = path.resolve('public', 'gpulse-mark.svg');
 const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
   /useEffect\(\(\)\s*=>\s*\{([\s\S]*?)\},\s*\[[^\]]*\]\);/g,
 )].filter((match) => match[1].includes('navigator.geolocation.getCurrentPosition')).length;
@@ -119,6 +123,13 @@ checkTrue('login reads the shared language context', loginScreenSource.includes(
 checkZero('login retains inactive local language state', [...loginScreenSource.matchAll(/useState\(LANGUAGES\[0\]\)/g)].length);
 checkTrue('profile settings presents a language selector', profileViewSource.includes("<select") && profileViewSource.includes('setLocale'));
 checkTrue('VIP dialog has Escape and backdrop dismissal', paywallModalSource.includes("event.key === 'Escape'") && paywallModalSource.includes('event.target === event.currentTarget'));
+checkTrue('canonical GPulse brand component exists', brandLogoSource.includes('GPulseLogo'));
+checkTrue('canonical GPulse capitalization is preserved', brandLogoSource.includes('GPulse'));
+checkTrue('Splash uses canonical GPulse brand component', appSource.includes('<GPulseLogo'));
+checkTrue('Login uses canonical GPulse brand component', loginScreenSource.includes('<GPulseLogo'));
+checkTrue('Splash no longer uses generic Activity as brand identity', !appSource.includes('Activity'));
+checkTrue('brand favicon is local', fs.existsSync(faviconPath));
+checkZero('external logo URL dependencies', countMatches(/(?:bolt\.new\/static\/og_default|vite\.svg)/gi));
 checkTrue('secure Stories migration exists', storiesMigrationExists);
 checkGreaterOrEqual('Stories table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.stories/g)].length, 1);
 checkGreaterOrEqual('Story view table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.story_views/g)].length, 1);

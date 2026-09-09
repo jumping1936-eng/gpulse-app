@@ -5,11 +5,13 @@ import SafetyGuard from '@/components/SafetyGuard';
 import LoginScreen from '@/components/LoginScreen';
 import LegalTerms from '@/components/LegalTerms';
 import MainApp from '@/components/MainApp';
-import { Loader2, Activity } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { supabase } from './supabaseClient';
+import GPulseLogo from '@/components/brand/GPulseLogo';
 
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { useLanguage } from '@/context/LanguageContext';
 
 // ==========================================
 // 核心業務邏輯元件 (確保被 AuthProvider 包覆)
@@ -22,6 +24,7 @@ function AppContent() {
     completePasswordRecovery,
   } = useAuth();
   const { simulateBlocked, setSimulateBlocked } = useApp();
+  const { t } = useLanguage();
 
   const [appState, setAppState] = useState<AppState>('safety-check');
   const [isChecking, setIsChecking] = useState(true);
@@ -67,12 +70,10 @@ function AppContent() {
   if (isChecking || isAuthLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 via-blue-500 to-cyan-400 flex items-center justify-center shadow-2xl shadow-violet-500/30">
-          <Activity className="w-8 h-8 text-white" strokeWidth={2.5} />
-        </div>
+        <GPulseLogo size="lg" variant="full" />
         <Loader2 className="w-6 h-6 text-violet-400/60 animate-spin" />
-        <p className="text-white/20 text-xs tracking-widest uppercase">
-          {isAuthLoading ? "正在驗證身份狀態..." : "正在檢查您的所在地區..."}
+        <p className="text-white/35 text-xs tracking-[0.18em] uppercase">
+          {isAuthLoading ? t('splash.authLoading', '正在驗證身份狀態…') : t('splash.locationLoading', '正在檢查您的所在地區…')}
         </p>
       </div>
     );

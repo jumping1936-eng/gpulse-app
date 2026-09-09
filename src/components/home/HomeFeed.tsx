@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { getPublicProfilePhoto, isValidProfileName, PUBLIC_PROFILE_FIELDS } from '@/utils/profile';
 import { boostUserProfile, sendLikeWithCooldown } from '@/utils/profileInteractions';
 import { DistanceBucket, useProfileDistanceBuckets } from '@/hooks/useProfileDistanceBuckets';
+import GPulseLogo from '@/components/brand/GPulseLogo';
 
 interface ProfileRecord {
   id: string;
@@ -385,7 +386,7 @@ export default function HomeFeed() {
 
         <header className="mb-5 flex items-center justify-between">
           <div>
-            <p className="text-[11px] tracking-tight text-violet-300/70">GPulse</p>
+            <GPulseLogo size="sm" />
             <h1 className="mt-1 text-2xl font-black tracking-tight">Home</h1>
           </div>
           <div className="flex items-center gap-2">
