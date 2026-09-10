@@ -556,25 +556,25 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   // ✅ 總監升級：將函數改為 async 以支援後端非同步登出
   async function handleMenuClick(action: string) {
     switch (action) {
-      case '編輯檔案':
+      case 'edit':
         if (ownProfileLoadStatus !== 'ready') {
           alert(
             ownProfileLoadStatus === 'missing'
-              ? '尚未建立個人檔案，目前無法安全儲存設定。'
-              : '個人檔案尚未可用，請先完成載入後再試。',
+              ? t('profile.missingForEdit', '尚未建立個人檔案，目前無法安全儲存設定。')
+              : t('profile.notReadyForEdit', '個人檔案尚未可用，請先完成載入後再試。'),
           );
           break;
         }
         setEditForm(profile);
         setIsEditModalOpen(true);
         break;
-      case '通知設定': setIsNotificationModalOpen(true); break;
-      case '隱私設定': setIsPrivacyModalOpen(true); break;
+      case 'notifications': setIsNotificationModalOpen(true); break;
+      case 'privacy': setIsPrivacyModalOpen(true); break;
       // ✅ 總監新增：呼叫上層 (MainApp) 傳進來的封鎖名單開啟函式
-      case '封鎖名單': if(onOpenBlockedUsers) onOpenBlockedUsers(); break;
-      case '幫助與支援': setIsHelpModalOpen(true); break;
-      case '登出': 
-        if (window.confirm('確定要登出帳號嗎？ 👋')) {
+      case 'blocked': if(onOpenBlockedUsers) onOpenBlockedUsers(); break;
+      case 'help': setIsHelpModalOpen(true); break;
+      case 'logout':
+        if (window.confirm(t('settings.logoutConfirm', '確定要登出帳號嗎？'))) {
           try {
             // 🛡️ 真・登出機制：徹底銷毀 Supabase 在瀏覽器中的 Token
             await supabase.auth.signOut();
@@ -825,7 +825,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
       )}
 
       {entitlementStatus === 'error' && (
-        <p className="px-4 mt-3 text-center text-xs text-rose-300">{entitlementError ?? '無法確認 VIP 資格。'}</p>
+        <p className="px-4 mt-3 text-center text-xs text-rose-300">{entitlementError ?? t('vip.entitlementError', '無法確認 VIP 資格。')}</p>
       )}
 
       {/* 主畫面：帳號設定選單 */}
@@ -836,16 +836,16 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         <div className="bg-slate-950 border border-white/8 rounded-2xl divide-y divide-white/5 overflow-hidden">
           {/* ✅ 總監新增：將「封鎖名單」加入到陣列中渲染 */}
           {[
-            { value: '編輯檔案', label: t('settings.editProfile', '編輯檔案') },
-            { value: '通知設定', label: t('settings.notifications', '通知設定') },
-            { value: '隱私設定', label: t('settings.privacy', '隱私設定') },
-            { value: '封鎖名單', label: t('settings.blocked', '封鎖名單') },
-            { value: '幫助與支援', label: t('settings.help', '幫助與支援') },
+            { value: 'edit', label: t('settings.editProfile', '編輯檔案') },
+            { value: 'notifications', label: t('settings.notifications', '通知設定') },
+            { value: 'privacy', label: t('settings.privacy', '隱私設定') },
+            { value: 'blocked', label: t('settings.blocked', '封鎖名單') },
+            { value: 'help', label: t('settings.help', '幫助與支援') },
           ].map(item => (
             <button key={item.value} onClick={() => handleMenuClick(item.value)} className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/10 transition-colors">
               <div className="flex items-center gap-3">
                 {/* 給封鎖名單一個特殊的小圖示 */}
-                {item.value === '封鎖名單' && <Ban className="w-4 h-4 text-slate-400" />}
+                {item.value === 'blocked' && <Ban className="w-4 h-4 text-slate-400" />}
                 <span className="text-white/80 text-sm">{item.label}</span>
               </div>
               <ChevronRight className="w-4 h-4 text-white/20" />
@@ -868,7 +868,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
             </select>
           </label>
           
-          <button onClick={() => handleMenuClick('登出')} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-800 transition-colors">
+          <button onClick={() => handleMenuClick('logout')} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-800 transition-colors">
             <LogOut className="w-4 h-4 text-slate-400" />
             <span className="text-slate-300 text-sm">{t('settings.logout', '登出')}</span>
           </button>

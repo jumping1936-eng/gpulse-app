@@ -36,24 +36,24 @@ export default function MainApp() {
       if (!currentUser || !targetUser?.id) return;
 
       if (blockListStatus !== 'ready') {
-        alert('目前無法確認封鎖名單，暫時無法建立新對話。');
+        alert(t('chat.createBlocked', '目前無法確認封鎖名單，暫時無法建立新對話。'));
         return;
       }
 
       if (targetUser.id === currentUser.id) {
-        alert('無法與自己建立對話。');
+        alert(t('chat.selfConversation', '無法與自己建立對話。'));
         return;
       }
 
       if (blockedUsers.has(targetUser.id)) {
-        alert('你已封鎖此使用者，無法發送訊息。');
+        alert(t('chat.blockedConversation', '你已封鎖此使用者，無法發送訊息。'));
         return;
       }
 
       try {
         const { data: realRoomId, error: rpcError } = await supabase.rpc('get_or_create_conversation', { other_id: targetUser.id });
         if (rpcError) throw rpcError;
-        if (typeof realRoomId !== 'string') throw new Error('建立對話未取得有效房間識別碼。');
+        if (typeof realRoomId !== 'string') throw new Error(t('chat.invalidConversation', '建立對話未取得有效房間識別碼。'));
 
         const { data: convoData, error: convoError } = await supabase
           .from('conversations')
@@ -82,13 +82,13 @@ export default function MainApp() {
         } as Conversation);
       } catch (err) {
         console.error('🔴 無法建立或讀取聊天室:', err);
-        alert('建立聊天室連線失敗，請確認資料庫狀態。');
+        alert(t('chat.openError', '建立聊天室連線失敗，請確認資料庫狀態。'));
       }
     };
 
     window.addEventListener('jump-to-chat', handleJumpToChat);
     return () => window.removeEventListener('jump-to-chat', handleJumpToChat);
-  }, [currentUser, blockedUsers, blockListStatus]);
+  }, [currentUser, blockedUsers, blockListStatus, t]);
 
   useEffect(() => {
     if (activeTab === 'chat') setUnreadChat(0);
@@ -150,7 +150,7 @@ export default function MainApp() {
       {stealthMode && (
         <div className="bg-[#0B0C10]/80 backdrop-blur-xl border-b border-white/5 px-4 py-1.5 flex items-center gap-2 z-10">
           <Ghost className="w-3.5 h-3.5 text-violet-400" />
-          <span className="text-violet-400/80 text-xs font-medium">隱身模式 —只有你按讚的人能看見你</span>
+          <span className="text-violet-400/80 text-xs font-medium">{t('settings.stealthHint', '隱身模式 — 只有你按讚的人能看見你')}</span>
         </div>
       )}
 
@@ -159,7 +159,7 @@ export default function MainApp() {
         {activeTab === 'explore' && <ExploreTab />}
         {activeTab === 'chat' && !activeChatConvo && <ChatList onOpenConvo={(convo) => {
           if (blockListStatus !== 'ready') {
-            alert('目前無法確認封鎖名單，暫時無法開啟對話。');
+            alert(t('chat.openBlocked', '目前無法確認封鎖名單，暫時無法開啟對話。'));
             return;
           }
           setActiveChatConvo(convo);

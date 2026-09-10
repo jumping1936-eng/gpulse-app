@@ -122,7 +122,7 @@ export default function ProfileModal({ user, onClose }: Props) {
   async function handleBlock() {
     if (!user?.id || !currentUser?.id) return;
     if (user.id === currentUser.id) {
-      alert('你無法封鎖自己。');
+      alert(t('block.selfError', '你無法封鎖自己。'));
       return;
     }
     try {
@@ -130,7 +130,7 @@ export default function ProfileModal({ user, onClose }: Props) {
       onClose();
     } catch (error) {
       console.error('封鎖失敗:', error);
-      alert('封鎖失敗，請稍後再試。');
+      alert(t('block.actionError', '封鎖失敗，請稍後再試。'));
     }
   }
 
@@ -352,7 +352,7 @@ export default function ProfileModal({ user, onClose }: Props) {
             </button>
             <button onClick={handleMessage} className="flex-1 flex flex-col items-center justify-center gap-1 bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 py-3 rounded-2xl font-semibold text-xs transition-all duration-200 hover:scale-[1.02] active:scale-95 pointer-events-auto">
               <MessageCircle className="w-5 h-5"/>
-              Message
+              {t('common.message', '訊息')}
             </button>
           </div>
           {interactionMessage && (

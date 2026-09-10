@@ -161,7 +161,7 @@ export default function HomeFeed() {
         console.error('HomeFeed fetch profiles failed:', err);
         if (isMounted) {
           setUsers([]);
-          setFetchError('目前無法載入使用者資料，請稍後再試。');
+          setFetchError(t('home.profileLoadError', '目前無法載入使用者資料，請稍後再試。'));
         }
       } finally {
         if (isMounted) {
@@ -177,7 +177,7 @@ export default function HomeFeed() {
       isMounted = false;
       window.removeEventListener('gpulse-profile-updated', fetchProfiles);
     };
-  }, []);
+  }, [t]);
 
   const visibleUsers = useMemo(() => {
     if (blockListStatus !== 'ready') return [];
@@ -264,7 +264,7 @@ export default function HomeFeed() {
 
   const handleLike = async (item: Recommendation) => {
     if (!canInteractWith(item.id)) {
-      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '目前無法安全傳送心動。', tone: 'error' } }));
+      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: t('interaction.actionUnavailable', '目前無法安全執行此操作。'), tone: 'error' } }));
       return;
     }
 
@@ -279,23 +279,23 @@ export default function HomeFeed() {
       const result = await sendLikeWithCooldown(item.id);
       if (result === 'in-flight') {
         setLikeStates((previous) => ({ ...previous, [item.id]: 'idle' }));
-        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '心動正在送出，請稍候。', tone: 'info' } }));
+        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: t('interaction.likePending', '心動正在送出，請稍候。'), tone: 'info' } }));
         return;
       }
       setLikeStates((previous) => ({ ...previous, [item.id]: result === 'sent' ? 'sent' : 'cooldown' }));
       if (result === 'cooldown') {
-        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '你最近已傳送過心動，請 24 小時後再試。', tone: 'info' } }));
+        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: t('interaction.likeCooldown', '你最近已傳送過心動，請 24 小時後再試。'), tone: 'info' } }));
       }
     } catch (error) {
       console.error('HomeFeed 傳送心動失敗:', error);
       setLikeStates((previous) => ({ ...previous, [item.id]: 'error' }));
-      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '無法傳送心動，請稍後再試。', tone: 'error' } }));
+      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: t('interaction.likeError', '無法傳送心動，請稍後再試。'), tone: 'error' } }));
     }
   };
 
   const handleBoost = async (item: Recommendation) => {
     if (!canInteractWith(item.id)) {
-      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '目前無法安全推送。', tone: 'error' } }));
+      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: t('interaction.boostUnavailable', '目前無法安全推送。'), tone: 'error' } }));
       return;
     }
 
@@ -310,14 +310,14 @@ export default function HomeFeed() {
       const wasSubmitted = await boostUserProfile(item.id);
       if (!wasSubmitted) {
         setBoostStates((previous) => ({ ...previous, [item.id]: 'idle' }));
-        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '推送正在送出，請稍候。', tone: 'info' } }));
+        setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: t('interaction.boostPending', '推送正在送出，請稍候。'), tone: 'info' } }));
         return;
       }
       setBoostStates((previous) => ({ ...previous, [item.id]: 'sent' }));
     } catch (error) {
       console.error('HomeFeed 推送失敗:', error);
       setBoostStates((previous) => ({ ...previous, [item.id]: 'error' }));
-      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: '無法推送，請稍後再試。', tone: 'error' } }));
+      setInteractionFeedback((previous) => ({ ...previous, [item.id]: { message: t('interaction.boostError', '無法推送，請稍後再試。'), tone: 'error' } }));
     }
   };
 
@@ -325,7 +325,7 @@ export default function HomeFeed() {
     const type = 'message';
     const key = `${type}:${item.id}`;
     if (isWithin24Hours(item.id, type)) {
-      alert('訊息已在 24 小時內使用過，請稍後再試。');
+      alert(t('chat.actionCooldown', '訊息已在 24 小時內使用過，請稍後再試。'));
       return;
     }
 
@@ -620,7 +620,7 @@ export default function HomeFeed() {
                           }`}
                         >
                           {likeState === 'sent' || likeState === 'cooldown' ? <Check className="h-3.5 w-3.5" /> : <Heart className="h-3.5 w-3.5" />}
-                          {likeState === 'submitting' ? '傳送中' : likeState === 'sent' ? '已心動' : likeState === 'cooldown' ? '冷卻中' : '心動'}
+                          {likeState === 'submitting' ? t('interaction.sending', '傳送中') : likeState === 'sent' ? t('interaction.sent', '已發送') : likeState === 'cooldown' ? t('interaction.cooldown', '冷卻中') : t('interaction.like', '心動')}
                         </button>
 
                         <button

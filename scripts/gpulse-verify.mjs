@@ -97,6 +97,10 @@ const exploreTabSource = fs.readFileSync(path.join(sourceRoot, 'components', 'ex
 const chatRoomSource = fs.readFileSync(path.join(sourceRoot, 'components', 'chat', 'ChatRoom.tsx'), 'utf8');
 const languageContextSource = fs.readFileSync(path.join(sourceRoot, 'context', 'LanguageContext.tsx'), 'utf8');
 const appTranslationsSource = fs.readFileSync(path.join(sourceRoot, 'i18n', 'appTranslations.ts'), 'utf8');
+const englishTranslationSource = appTranslationsSource.match(/const en: TranslationMap = \{([\s\S]*?)\n\};\n\nconst translations/);
+const englishTranslationKeys = new Set(
+  [...(englishTranslationSource?.[1] ?? '').matchAll(/'([^']+)':/g)].map((match) => match[1]),
+);
 const loginScreenSource = fs.readFileSync(path.join(sourceRoot, 'components', 'LoginScreen.tsx'), 'utf8');
 const paywallModalSource = fs.readFileSync(path.join(sourceRoot, 'components', 'PaywallModal.tsx'), 'utf8');
 const appSource = fs.readFileSync(path.join(sourceRoot, 'App.tsx'), 'utf8');
@@ -106,6 +110,9 @@ const faviconPath = path.resolve('public', 'gpulse-mark.svg');
 const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
   /useEffect\(\(\)\s*=>\s*\{([\s\S]*?)\},\s*\[[^\]]*\]\);/g,
 )].filter((match) => match[1].includes('navigator.geolocation.getCurrentPosition')).length;
+const missingEnglishTranslationKeys = [...new Set(
+  files.flatMap((file) => [...fs.readFileSync(file, 'utf8').matchAll(/\bt\(\s*'([^']+)'/g)].map((match) => match[1])),
+)].filter((key) => !englishTranslationKeys.has(key));
 
 checkGreaterOrEqual('runtime source files scanned', files.length, 1);
 checkTrue('public profile field contract exists', profileUtilitySource.includes('PUBLIC_PROFILE_FIELDS'));
@@ -119,6 +126,7 @@ checkTrue('own profile distinguishes loading, missing, and error', /OwnProfileLo
 checkTrue('language provider has one persisted preference key', languageContextSource.includes('LANGUAGE_PREFERENCE_KEY'));
 checkTrue('language provider exposes selection and translation APIs', languageContextSource.includes('setLocale') && languageContextSource.includes('t:'));
 checkTrue('language resources define the supported global locales', appTranslationsSource.includes("SUPPORTED_LOCALES = ['zh-TW', 'en']"));
+checkZero('application translation keys missing English entries', missingEnglishTranslationKeys.length);
 checkTrue('login reads the shared language context', loginScreenSource.includes('useLanguage()'));
 checkZero('login retains inactive local language state', [...loginScreenSource.matchAll(/useState\(LANGUAGES\[0\]\)/g)].length);
 checkTrue('profile settings presents a language selector', profileViewSource.includes("<select") && profileViewSource.includes('setLocale'));

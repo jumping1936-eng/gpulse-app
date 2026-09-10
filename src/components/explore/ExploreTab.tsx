@@ -66,9 +66,9 @@ function fileToDataUrl(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') resolve(reader.result);
-      else reject(new Error('無法讀取圖片檔案。'));
+      else reject(new Error());
     };
-    reader.onerror = () => reject(new Error('無法讀取圖片檔案。'));
+    reader.onerror = () => reject(new Error());
     reader.readAsDataURL(file);
   });
 }
@@ -198,11 +198,11 @@ export default function ExploreTab() {
       console.error('🔴 獲取真實名片失敗:', error);
       setProfiles([]);
       setMyProfile(null);
-      setProfileFetchError('目前無法載入使用者資料，請稍後再試。');
+      setProfileFetchError(t('explore.profileLoadError', '目前無法載入使用者資料，請稍後再試。'));
     } finally {
       setIsLoading(false);
     }
-  }, [authUser]);
+  }, [authUser, t]);
 
   const loadOwnStory = React.useCallback(async () => {
     if (!authUser?.id) {
@@ -216,7 +216,7 @@ export default function ExploreTab() {
     if (error) {
       console.error('無法載入我的限時動態:', error);
       setOwnStory(null);
-      setStoryError('目前無法載入我的限時動態，請稍後再試。');
+      setStoryError(t('stories.ownLoadError', '目前無法載入我的限時動態，請稍後再試。'));
       setIsOwnStoryLoading(false);
       return;
     }
@@ -224,7 +224,7 @@ export default function ExploreTab() {
     const row = Array.isArray(data) ? data[0] : null;
     setOwnStory(isOwnActiveStory(row) ? row : null);
     setIsOwnStoryLoading(false);
-  }, [authUser?.id]);
+  }, [authUser?.id, t]);
 
   const loadVisibleStories = React.useCallback(async () => {
     if (!authUser?.id || blockListStatus !== 'ready') {
@@ -238,14 +238,14 @@ export default function ExploreTab() {
     if (error) {
       console.error('無法載入限時動態清單:', error);
       setVisibleStories([]);
-      setStoryError('目前無法載入限時動態，請稍後再試。');
+      setStoryError(t('stories.loadError', '目前無法載入限時動態，請稍後再試。'));
       setIsStoryListLoading(false);
       return;
     }
 
     setVisibleStories(Array.isArray(data) ? data.filter(isVisibleStoryMetadata) : []);
     setIsStoryListLoading(false);
-  }, [authUser?.id, blockListStatus]);
+  }, [authUser?.id, blockListStatus, t]);
 
   const refreshStories = React.useCallback(async () => {
     await Promise.all([loadOwnStory(), loadVisibleStories()]);
@@ -253,12 +253,12 @@ export default function ExploreTab() {
 
   const handleCreateStory = React.useCallback(async (file: File) => {
     if (!authUser?.id) {
-      setStoryError('請先登入後再新增限時動態。');
+      setStoryError(t('stories.loginRequired', '請先登入後再新增限時動態。'));
       return;
     }
 
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setStoryError('限時動態僅支援 JPEG、PNG 或 WebP 圖片。');
+      setStoryError(t('stories.imageTypeError', '限時動態僅支援 JPEG、PNG 或 WebP 圖片。'));
       return;
     }
 
@@ -269,7 +269,7 @@ export default function ExploreTab() {
     try {
       const mediaData = await fileToDataUrl(file);
       if (!hasAcceptedStoryDataUrl(mediaData)) {
-        throw new Error('圖片格式不符或編碼後大小超過限時動態上限。');
+        throw new Error(t('stories.mediaRejected', '圖片格式不符或編碼後大小超過限時動態上限。'));
       }
 
       const { error } = await supabase.rpc('create_own_story', {
@@ -280,14 +280,14 @@ export default function ExploreTab() {
       if (error) throw error;
 
       await refreshStories();
-      setStoryNotice('限時動態已發布。');
+      setStoryNotice(t('stories.created', '限時動態已發布。'));
     } catch (error) {
       console.error('新增限時動態失敗:', error);
-      setStoryError(error instanceof Error ? error.message : '無法新增限時動態，請稍後再試。');
+      setStoryError(error instanceof Error && error.message ? error.message : t('stories.createError', '無法新增限時動態，請稍後再試。'));
     } finally {
       setIsCreatingStory(false);
     }
-  }, [authUser?.id, refreshStories]);
+  }, [authUser?.id, refreshStories, t]);
 
   const handleDeleteOwnStory = React.useCallback(async (storyId: string): Promise<boolean> => {
     setStoryError(null);
@@ -299,14 +299,14 @@ export default function ExploreTab() {
 
     if (error || data !== true) {
       if (error) console.error('刪除限時動態失敗:', error);
-      setStoryError('無法刪除限時動態，請稍後再試。');
+      setStoryError(t('stories.deleteError', '無法刪除限時動態，請稍後再試。'));
       return false;
     }
 
     await refreshStories();
-    setStoryNotice('限時動態已刪除。');
+    setStoryNotice(t('stories.deleted', '限時動態已刪除。'));
     return true;
-  }, [refreshStories]);
+  }, [refreshStories, t]);
 
   const handleStoryViewed = React.useCallback((storyId: string) => {
     setVisibleStories((current) => current.map((story) => (

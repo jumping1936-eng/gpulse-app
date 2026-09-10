@@ -91,8 +91,8 @@ export default function PaywallModal({ onClose }: Props) {
               <p className="text-sm font-semibold text-white">
                 {isVIP ? t('vip.alreadyActive', '目前帳號已具備 VIP 資格。') : entitlementStatus === 'loading' ? t('vip.loading', '正在確認 VIP 資格…') : t('vip.unavailable', '目前無法確認 VIP 資格。')}
               </p>
-              {entitlementStatus === 'error' && <p className="mt-2 text-xs text-rose-300">{entitlementError ?? '請稍後再試。'}</p>}
-              {trialEligibility.status === 'database-blocked' && <p className="mt-2 text-xs text-white/45">免費試用資格尚未具備可驗證的後端資料。</p>}
+              {entitlementStatus === 'error' && <p className="mt-2 text-xs text-rose-300">{entitlementError ?? t('common.tryAgainLater', '請稍後再試。')}</p>}
+              {trialEligibility.status === 'database-blocked' && <p className="mt-2 text-xs text-white/45">{t('vip.trialBackendUnavailable', '免費試用資格尚未具備可驗證的後端資料。')}</p>}
             </div>
           )}
 

@@ -74,7 +74,7 @@ export default function BlockedUsersList({ onBack }: Props) {
       } catch (error) {
         console.error('載入封鎖名單失敗:', error);
         setBlockedUsers([]);
-        alert('無法載入封鎖名單，請稍後再試。');
+        alert(t('error.blockLoad', '無法載入封鎖名單，請稍後再試。'));
       } finally {
         setIsLoading(false);
       }
@@ -91,7 +91,7 @@ export default function BlockedUsersList({ onBack }: Props) {
       setBlockedUsers(prev => prev.filter(row => row.blocked_id !== userId));
     } catch (error) {
       console.error('解除封鎖失敗:', error);
-      alert('解除封鎖失敗，請稍後再試。');
+      alert(t('error.unblock', '解除封鎖失敗，請稍後再試。'));
     }
   };
 
@@ -136,7 +136,7 @@ export default function BlockedUsersList({ onBack }: Props) {
                   {/* 資訊 */}
                   <div className="flex flex-col">
                     <span className="text-white font-semibold text-sm">{user.name}</span>
-                    <span className="text-white/40 text-[10px]">{t('block.title', '封鎖名單管理')}: {user.date}</span>
+                    <span className="text-white/40 text-[10px]">{t('block.blockedOn', '封鎖日期')}: {user.date}</span>
                   </div>
                 </div>
 

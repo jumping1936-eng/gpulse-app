@@ -19,7 +19,7 @@ export default function LoginScreen({
   onPasswordRecoveryComplete,
 }: Props) {
   // === 狀態管理 (保留您原有的所有狀態) ===
-  const { locale } = useLanguage();
+  const { locale, t: appT } = useLanguage();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -73,7 +73,7 @@ export default function LoginScreen({
   // === OTP 驗證邏輯 (保留您的原版邏輯) ===
   async function handleVerifyOtp() {
     if (!otpCode.trim() || otpCode.length !== 8) {
-      setAuthError('請輸入完整的 8 位數驗證碼');
+      setAuthError(appT('auth.otpInvalid', '請輸入完整的 8 位數驗證碼。'));
       return;
     }
     setLoading(true);
@@ -83,12 +83,12 @@ export default function LoginScreen({
     try {
       const { data, error } = await supabase.auth.verifyOtp({ email, token: otpCode, type: 'signup' });
       if (error) {
-        setAuthError('驗證失敗：' + error.message + ' (驗證碼錯誤或已過期)');
+        setAuthError(appT('auth.otpFailed', '驗證失敗，驗證碼可能錯誤或已過期。'));
       } else if (data.session) {
         handleRememberMeStorage();
         onLogin();
       } else {
-        setAuthError('驗證成功，但無法取得登入狀態，請重新登入。');
+        setAuthError(appT('auth.otpNoSession', '驗證成功，但無法取得登入狀態，請重新登入。'));
         setIsOtpPending(false);
       }
     } catch (err: unknown) {
@@ -109,7 +109,7 @@ export default function LoginScreen({
     // 1. Email 登入與註冊
     if (provider === 'email') {
       if (!email.trim() || !password.trim()) {
-        setAuthError('請輸入電子郵件與密碼');
+        setAuthError(appT('auth.credentialsRequired', '請輸入電子郵件與密碼。'));
         setLoading(false);
         setLoadingProvider(null);
         return;
@@ -123,7 +123,7 @@ export default function LoginScreen({
             const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
             
             if (signUpError) {
-              setAuthError(signUpError.message.includes('already registered') ? '⚠️ 密碼錯誤！請確認密碼是否正確，或點擊忘記密碼。' : '註冊失敗：' + signUpError.message);
+              setAuthError(signUpError.message.includes('already registered') ? appT('auth.passwordIncorrect', '密碼錯誤。請確認密碼，或使用忘記密碼。') : signUpError.message);
             } else {
               // 註冊成功
               if (signUpData.session) {
@@ -184,13 +184,13 @@ export default function LoginScreen({
       });
 
       if (error) {
-        setForgotError('目前無法寄送重設連結，請稍後再試。');
+        setForgotError(appT('auth.resetSendError', '目前無法寄送重設連結，請稍後再試。'));
         return;
       }
 
       setForgotSuccess(true);
     } catch {
-      setForgotError('目前無法寄送重設連結，請稍後再試。');
+      setForgotError(appT('auth.resetSendError', '目前無法寄送重設連結，請稍後再試。'));
     } finally {
       setForgotLoading(false);
     }
@@ -198,12 +198,12 @@ export default function LoginScreen({
 
   async function handlePasswordRecoverySubmit() {
     if (newPassword.length < 8) {
-      setRecoveryError('新密碼至少需要 8 個字元。');
+      setRecoveryError(appT('auth.passwordMinLength', '新密碼至少需要 8 個字元。'));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setRecoveryError('兩次輸入的新密碼不一致。');
+      setRecoveryError(appT('auth.passwordMismatch', '兩次輸入的新密碼不一致。'));
       return;
     }
 
@@ -212,7 +212,7 @@ export default function LoginScreen({
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
-        setRecoveryError('無法更新密碼。重設連結可能已過期，請重新申請。');
+        setRecoveryError(appT('auth.passwordUpdateExpired', '無法更新密碼。重設連結可能已過期，請重新申請。'));
         return;
       }
 
@@ -220,7 +220,7 @@ export default function LoginScreen({
       setConfirmPassword('');
       setRecoverySuccess(true);
     } catch {
-      setRecoveryError('無法更新密碼。請稍後再試或重新申請重設連結。');
+      setRecoveryError(appT('auth.passwordUpdateError', '無法更新密碼。請稍後再試或重新申請重設連結。'));
     } finally {
       setRecoveryLoading(false);
     }
@@ -271,13 +271,13 @@ export default function LoginScreen({
             {isOtpPending && (
               <div className="mb-4 p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center flex flex-col gap-4">
                 <div>
-                  <h3 className="text-emerald-400 font-bold mb-1 flex items-center justify-center gap-2"><KeyRound className="w-4 h-4" /> 註冊驗證碼</h3>
-                  <p className="text-emerald-300/70 text-xs leading-relaxed">我們已將 8 位數驗證碼寄至您的信箱。</p>
+                  <h3 className="text-emerald-400 font-bold mb-1 flex items-center justify-center gap-2"><KeyRound className="w-4 h-4" /> {appT('auth.otpTitle', '註冊驗證碼')}</h3>
+                  <p className="text-emerald-300/70 text-xs leading-relaxed">{appT('auth.otpHint', '我們已將 8 位數驗證碼寄至您的信箱。')}</p>
                 </div>
                 <input type="text" maxLength={8} value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))} onKeyDown={e => e.key === 'Enter' && otpCode.length === 8 && handleVerifyOtp()} placeholder="12345678" className="w-full bg-black/20 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-400 text-center text-xl tracking-[0.4em] font-mono focus:outline-none focus:border-emerald-400 transition-all" />
                 <button type="button" onClick={handleVerifyOtp} disabled={loading || otpCode.length !== 8} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl transition-colors font-bold tracking-wide text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                   {loadingProvider === 'otp' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MailCheck className="w-4 h-4" />}
-                  {loadingProvider === 'otp' ? '驗證中...' : '確認驗證碼'}
+                  {loadingProvider === 'otp' ? appT('auth.otpVerifying', '驗證中…') : appT('auth.otpConfirm', '確認驗證碼')}
                 </button>
               </div>
             )}
@@ -301,7 +301,7 @@ export default function LoginScreen({
               {/* 🎯 總監優化：全寬度 Google 登入按鈕 (已徹底拔除不支援的 LINE) */}
               <button onClick={() => handleLogin('google')} disabled={loading || isOtpPending} className={`w-full bg-gradient-to-br from-red-500/20 to-yellow-500/10 border border-red-500/20 hover:border-red-400/40 backdrop-blur-xl rounded-xl py-3.5 flex items-center justify-center gap-3 text-white/80 text-sm font-medium transition-all disabled:opacity-40`}>
                 {loadingProvider === 'google' ? <Loader2 className="w-5 h-5 animate-spin" /> : <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">G</span>} 
-                使用 Google 帳號登入
+                {appT('auth.googleSignIn', '使用 Google 帳號登入')}
               </button>
             </div>
           </div>
@@ -317,31 +317,31 @@ export default function LoginScreen({
                 <KeyRound className="h-5 w-5 text-violet-300" />
               </div>
               <div>
-                <h2 className="font-bold text-white">設定新密碼</h2>
-                <p className="text-xs text-white/45">請為帳號設定新的登入密碼。</p>
+                <h2 className="font-bold text-white">{appT('auth.recoveryTitle', '設定新密碼')}</h2>
+                <p className="text-xs text-white/45">{appT('auth.recoveryHint', '請為帳號設定新的登入密碼。')}</p>
               </div>
             </div>
 
             {recoverySuccess ? (
               <div className="space-y-5 text-center">
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
-                  密碼已成功更新。
+                  {appT('auth.recoverySuccess', '密碼已成功更新。')}
                 </div>
                 <button type="button" onClick={onPasswordRecoveryComplete} className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 py-3 text-sm font-bold text-white">
-                  繼續使用 GPulse
+                  {appT('auth.recoveryContinue', '繼續使用 GPulse')}
                 </button>
               </div>
             ) : (
               <form onSubmit={(event) => { event.preventDefault(); void handlePasswordRecoverySubmit(); }} className="space-y-4">
                 {recoveryError && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-xs leading-relaxed text-red-300">{recoveryError}</div>}
-                <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="新密碼（至少 8 個字元）" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-500/60" />
-                <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="確認新密碼" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-500/60" />
+                <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={appT('auth.newPasswordPlaceholder', '新密碼（至少 8 個字元）')} className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-500/60" />
+                <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder={appT('auth.confirmPasswordPlaceholder', '確認新密碼')} className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-500/60" />
                 <button type="submit" disabled={recoveryLoading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50">
                   {recoveryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {recoveryLoading ? '更新中…' : '更新密碼'}
+                  {recoveryLoading ? appT('auth.passwordUpdating', '更新中…') : appT('auth.passwordUpdate', '更新密碼')}
                 </button>
                 <button type="button" onClick={() => setShowForgotPassword(true)} className="w-full text-xs text-violet-300/80 hover:text-violet-200">
-                  連結無效或過期？重新申請重設連結
+                  {appT('auth.recoveryLinkInvalid', '連結無效或過期？重新申請重設連結')}
                 </button>
               </form>
             )}
@@ -354,7 +354,7 @@ export default function LoginScreen({
           <div className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden" style={{ animation: 'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards' }}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-slate-900/50">
               <div className="flex items-center gap-2">
-                <h2 className="text-white font-bold text-base tracking-wide">忘記密碼</h2>
+                <h2 className="text-white font-bold text-base tracking-wide">{t.forgotPasswordTitle}</h2>
               </div>
               <button type="button" onClick={closeForgotPassword} className="text-white/40 hover:text-white/70 transition-colors bg-white/5 rounded-full p-1.5 hover:bg-red-500/20 hover:text-red-400"><X className="w-4 h-4" /></button>
             </div>
@@ -363,12 +363,12 @@ export default function LoginScreen({
               {forgotError && <div className="mb-5 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center leading-relaxed font-medium">{forgotError}</div>}
 
               <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <p className="text-white/50 text-sm leading-relaxed mb-6">請輸入註冊時使用的電子郵件。我們會寄送密碼重設連結；為保護帳號隱私，系統不會揭露此電子郵件是否已註冊。</p>
+                  <p className="text-white/50 text-sm leading-relaxed mb-6">{appT('auth.forgotHint', '請輸入註冊時使用的電子郵件。我們會寄送密碼重設連結；為保護帳號隱私，系統不會揭露此電子郵件是否已註冊。')}</p>
                   <input type="email" placeholder={t.emailAddress} value={forgotEmail} onChange={e => { setForgotEmail(e.target.value); setForgotError(''); }} onKeyDown={e => e.key === 'Enter' && handleForgotSendEmail()} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-violet-500/60 transition-all mb-6" />
-                  {forgotSuccess && <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center text-xs leading-relaxed text-emerald-200">若此電子郵件可接收重設，系統已寄出連結。請查看信箱並使用連結回到 GPulse 設定新密碼。</div>}
+                  {forgotSuccess && <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center text-xs leading-relaxed text-emerald-200">{appT('auth.forgotSuccess', '若此電子郵件可接收重設，系統已寄出連結。請查看信箱並使用連結回到 GPulse 設定新密碼。')}</div>}
                   <button type="button" onClick={handleForgotSendEmail} disabled={!forgotEmail.trim() || forgotLoading} className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2 text-sm tracking-wide">
                     {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
-                    {forgotLoading ? '發送中...' : '寄送重設連結'}
+                    {forgotLoading ? t.sending : t.sendResetLink}
                   </button>
               </div>
             </div>

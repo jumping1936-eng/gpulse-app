@@ -33,9 +33,9 @@ const isMessageVisible = (message: PreviewMessage, clearedAt: string | null): bo
   return new Date(message.created_at).getTime() > new Date(clearedAt).getTime();
 };
 
-const formatPreview = (message: PreviewMessage): string => {
-  if (message.is_vanish === true) return '🔥 [限時私密訊息]';
-  if (message.content.startsWith('data:image')) return '[圖片]';
+const formatPreview = (message: PreviewMessage, t: (key: string, fallback: string) => string): string => {
+  if (message.is_vanish === true) return `🔥 [${t('chat.vanishPreview', '限時私密訊息')}]`;
+  if (message.content.startsWith('data:image')) return `[${t('chat.imagePreview', '圖片')}]`;
   return message.content;
 };
 
@@ -146,7 +146,7 @@ export default function ChatList({ onOpenConvo }: Props) {
             created_at: typeof convo.created_at === 'string' ? convo.created_at : undefined,
             user1_id: typeof convo.user1_id === 'string' ? convo.user1_id : undefined,
             user2_id: typeof convo.user2_id === 'string' ? convo.user2_id : undefined,
-            last_message: previewMessage ? formatPreview(previewMessage) : undefined,
+            last_message: previewMessage ? formatPreview(previewMessage, t) : undefined,
             last_message_time: previewMessage?.created_at,
             other_user: otherUser as unknown as DBProfile,
             unread: unreadByConversation.get(conversationId) ?? 0,
@@ -166,7 +166,7 @@ export default function ChatList({ onOpenConvo }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [blockedUsers, currentUser, setUnreadChat]);
+  }, [blockedUsers, currentUser, setUnreadChat, t]);
 
   useEffect(() => {
     fetchConversations();

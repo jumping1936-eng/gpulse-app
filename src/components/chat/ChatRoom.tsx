@@ -34,6 +34,7 @@ const MessageBubble = ({
   isMe: boolean, 
   onSelfDestruct: (id: string) => void 
 }) => {
+  const { t } = useLanguage();
   const [timeLeft, setTimeLeft] = useState(10);
   const isImage = typeof msg.content === 'string' && msg.content.startsWith('data:image');
 
@@ -86,7 +87,7 @@ const MessageBubble = ({
         </div>
         
         <div className={`flex items-center gap-1 text-[9px] text-white/30 ${isMe ? 'justify-end' : 'justify-start'}`}>
-          <span>{msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '剛剛'}</span>
+          <span>{msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : t('chat.now', '剛剛')}</span>
           {isMe && (msg.is_read ? <CheckCheck className="w-3 h-3 text-cyan-400" /> : <Check className="w-3 h-3" />)}
         </div>
       </div>
@@ -184,11 +185,11 @@ export default function ChatRoom({ convo, onBack }: Props) {
       }
     } catch (error) {
       console.error('🔴 讀取訊息失敗:', error);
-      setMessageError('無法載入訊息，請稍後再試。');
+      setMessageError(t('chat.loadError', '無法載入訊息，請稍後再試。'));
     } finally {
       setIsLoadingMessages(false);
     }
-  }, [convo.id, markMessagesRead, myId]);
+  }, [convo.id, markMessagesRead, myId, t]);
 
   const setupRealtime = useCallback(() => {
     if (!convo.id) return;
@@ -255,17 +256,17 @@ export default function ChatRoom({ convo, onBack }: Props) {
   const sendMessage = async () => {
     if (!input.trim()) return;
     if (!myId) {
-      alert("⚠️ 無法獲取您的用戶身份，請重新登入！");
+      alert(t('chat.userUnavailable', '無法取得您的使用者身份，請重新登入。'));
       return;
     }
 
     if (blockListStatus !== 'ready') {
-      alert('目前無法確認封鎖名單，暫時無法傳送訊息。');
+      alert(t('chat.sendBlocked', '目前無法確認封鎖名單，暫時無法傳送訊息。'));
       return;
     }
 
     if (blockedUsers.has(convo.other_user?.id)) {
-      alert('你已封鎖此使用者，無法發送訊息。');
+      alert(t('chat.blockedConversation', '你已封鎖此使用者，無法發送訊息。'));
       return;
     }
 
@@ -303,7 +304,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
     } catch (error) {
       console.error('🔴 傳送訊息失敗:', error);
       setInput(content);
-      alert('訊息未傳送成功，內容已保留，請稍後再試。');
+      alert(t('chat.sendFailed', '訊息未傳送成功，內容已保留，請稍後再試。'));
     }
   };
 
@@ -337,7 +338,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
       if (error) throw error;
       if (typeof data !== 'string' || !data) {
-        throw new Error('清除聊天後未收到有效的清除時間。');
+        throw new Error(t('chat.clearInvalid', '清除聊天後未收到有效的清除時間。'));
       }
 
       clearedAtRef.current = data;
@@ -346,7 +347,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
       setMenuOpen(false);
     } catch (error) {
       console.error('🔴 清除聊天失敗:', error);
-      setMessageError('無法清除聊天紀錄，現有訊息未變更，請稍後再試。');
+      setMessageError(t('chat.clearError', '無法清除聊天紀錄，現有訊息未變更，請稍後再試。'));
     } finally {
       setIsClearingConversation(false);
     }
@@ -357,11 +358,11 @@ export default function ChatRoom({ convo, onBack }: Props) {
     setMenuOpen(false);
     try {
       await blockUser(convo.other_user.id);
-      alert(`${targetName} 已被加入封鎖名單。`);
+      alert(`${targetName} ${t('chat.blockSuccess', '已加入封鎖名單。')}`);
       onBack();
     } catch (error) {
       console.error('封鎖失敗:', error);
-      alert('封鎖失敗，請確認資料表存在或稍後再試。');
+      alert(t('chat.blockError', '封鎖失敗，請稍後再試。'));
     }
   };
 
@@ -396,7 +397,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
       });
     } catch (error) {
       console.error('讀取使用者檔案失敗:', error);
-      alert('無法載入使用者檔案，請稍後再試。');
+      alert(t('chat.profileLoadError', '無法載入使用者檔案，請稍後再試。'));
     }
   };
 
@@ -416,7 +417,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
         }).select().single();
         
         if (msgError) {
-           alert(`❌ 圖片上傳失敗：${msgError.message}`);
+           alert(t('chat.imageUploadError', '圖片上傳失敗。'));
            throw msgError;
         }
 
