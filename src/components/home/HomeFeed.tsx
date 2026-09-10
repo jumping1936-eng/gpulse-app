@@ -387,7 +387,7 @@ export default function HomeFeed() {
         <header className="mb-5 flex items-center justify-between">
           <div>
             <GPulseLogo size="sm" glow="none" />
-            <h1 className="mt-1 text-2xl font-black tracking-tight">Home</h1>
+            <h1 className="mt-1 text-2xl font-black tracking-tight">{t('home.title', '首頁')}</h1>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -412,7 +412,7 @@ export default function HomeFeed() {
         <section className="mb-6">
           <div className="mb-3 flex items-center justify-between">
             <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Discover</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">{t('home.eyebrowDiscover', '探索')}</p>
             <h2 className="text-lg font-bold text-white">{t('home.discover', '探索使用者')}</h2>
             </div>
             <button
@@ -469,7 +469,7 @@ export default function HomeFeed() {
                         </div>
                         {user.isOnline && <div className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-slate-950/60 px-1.5 py-1 text-[9px] text-emerald-300 backdrop-blur-xl">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                          online
+                          {t('home.online', '在線上')}
                         </div>}
                       </div>
                     </div>
@@ -494,7 +494,7 @@ export default function HomeFeed() {
         <section>
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-300/80">For You</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-300/80">{t('home.eyebrowForYou', '為你推薦')}</p>
               <h2 className="text-lg font-bold text-white">{t('home.latest', '系統最新推薦')}</h2>
             </div>
             <button
@@ -530,7 +530,7 @@ export default function HomeFeed() {
             <div className="mb-4 rounded-2xl border border-violet-500/25 bg-violet-500/5 p-3 backdrop-blur-xl">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/70">Selected</p>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/70">{t('home.selected', '正在關注')}</p>
                   <p className="mt-1 text-sm font-bold text-white">{t('home.selected', '正在關注')} {selectedUser.name}</p>
                 </div>
               </div>
@@ -582,7 +582,7 @@ export default function HomeFeed() {
                           VIP
                         </div>
                       )}
-                      {item.isOnline && <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title="online" />}
+                      {item.isOnline && <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title={t('home.online', '在線上')} />}
                     </div>
 
                     <div className="space-y-3 p-3">

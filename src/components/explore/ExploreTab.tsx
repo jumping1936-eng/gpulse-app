@@ -477,7 +477,7 @@ export default function ExploreTab() {
         )}
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Discover</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">{t('explore.eyebrowDiscover', '探索')}</p>
             <h2 className="text-lg font-bold text-white">{t('explore.title', '探索使用者')}</h2>
           </div>
           <button className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-200">
@@ -560,7 +560,7 @@ export default function ExploreTab() {
       <section className="px-4 pt-6">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-300/80">For You</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-300/80">{t('explore.eyebrowForYou', '為你推薦')}</p>
             <h2 className="text-lg font-bold text-white">{t('explore.latest', '系統最新推薦')}</h2>
           </div>
           <button className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-orange-500/20">
@@ -629,7 +629,7 @@ export default function ExploreTab() {
                       VIP
                     </div>
                   )}
-                  {item.isOnline && <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title="online" />}
+                  {item.isOnline && <div className="absolute bottom-2 right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-950/80 bg-emerald-400 shadow-[0_0_0_2px_rgba(15,23,42,0.8)]" title={t('explore.online', '在線上')} />}
                 </div>
 
                 <div className="space-y-3 p-3">
