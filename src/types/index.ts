@@ -32,8 +32,8 @@ export interface User {
 // ✅ 總監新增：對應資料庫的真實個人檔案
 export interface DBProfile {
   id: string;
-  full_name: string;
-  avatar_url: string;
+  full_name?: string;
+  avatar_url?: string;
   bio?: string;
 }
 
@@ -60,7 +60,7 @@ export interface Conversation {
   last_message?: string;
   last_message_time?: string;
   // 透過 Join 撈取出來的對方真實資料
-  other_user: DBProfile;
+  other_user?: DBProfile | null;
   unread?: number;
 
   // compatibility for older mock / static code

@@ -131,8 +131,9 @@ export default function ChatRoom({ convo, onBack }: Props) {
   const chatRoomChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const clearedAtRef = useRef<string | null>(null);
 
-  const targetName = convo.other_user?.full_name || t('common.unknownName', '尚未設定名稱');
-  const targetAvatar = convo.other_user?.avatar_url || convo.avatar || '';
+  const isDeletedConversation = !convo.other_user?.id || !convo.other_user?.full_name;
+  const targetName = convo.other_user?.full_name || t('chat.deletedUser', '已刪除帳號');
+  const targetAvatar = convo.other_user?.avatar_url || '';
 
   useEffect(() => {
     clearedAtRef.current = clearedAt;
@@ -255,6 +256,10 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
   const sendMessage = async () => {
     if (!input.trim()) return;
+    if (isDeletedConversation) {
+      alert(t('chat.deletedUserHint', '此帳號已刪除，無法再傳送訊息。'));
+      return;
+    }
     if (!myId) {
       alert(t('chat.userUnavailable', '無法取得您的使用者身份，請重新登入。'));
       return;
@@ -368,6 +373,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
   const handleViewProfile = async () => {
     setMenuOpen(false);
+    if (isDeletedConversation) return;
     if (!convo.other_user?.id) return;
 
     try {
@@ -403,6 +409,11 @@ export default function ChatRoom({ convo, onBack }: Props) {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    if (isDeletedConversation) {
+      alert(t('chat.deletedUserHint', '此帳號已刪除，無法再傳送訊息。'));
+      e.target.value = '';
+      return;
+    }
     if (!file || !myId) return;
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -461,13 +472,14 @@ export default function ChatRoom({ convo, onBack }: Props) {
             <span className="text-white font-bold text-sm tracking-wide">
               {targetName}
             </span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+            {!isDeletedConversation && <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
           </div>
         </div>
         
         <div className="relative">
           <button
             onClick={() => setVanishMode(!vanishMode)}
+            disabled={isDeletedConversation}
             className={`p-1.5 rounded-full transition-all duration-300 ${
               vanishMode
                 ? 'bg-pink-500/20 text-pink-400 shadow-[0_0_10px_rgba(236,72,153,0.3)]'
@@ -499,26 +511,30 @@ export default function ChatRoom({ convo, onBack }: Props) {
                   <Trash2 className="h-4 w-4 text-rose-400" />
                   {isClearingConversation ? t('chat.clearing', '清除中…') : t('chat.clear', '清除聊天紀錄')}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleBlockUser}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
-                >
-                  <ShieldOff className="h-4 w-4 text-amber-400" />
-                  {t('chat.block', '封鎖此人')}
-                </button>
+                {!isDeletedConversation && (
+                  <button
+                    type="button"
+                    onClick={handleBlockUser}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
+                  >
+                    <ShieldOff className="h-4 w-4 text-amber-400" />
+                    {t('chat.block', '封鎖此人')}
+                  </button>
+                )}
                 <div className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-500">
                   <Lock className="h-4 w-4 text-violet-400" />
                   {t('chat.privateAlbumUnavailable', '私密相簿存取尚未開放')}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleViewProfile}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
-                >
-                  <UserSquare2 className="h-4 w-4 text-cyan-400" />
-                  {t('chat.viewProfile', '查看個人檔案')}
-                </button>
+                {!isDeletedConversation && (
+                  <button
+                    type="button"
+                    onClick={handleViewProfile}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
+                  >
+                    <UserSquare2 className="h-4 w-4 text-cyan-400" />
+                    {t('chat.viewProfile', '查看個人檔案')}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -569,6 +585,7 @@ export default function ChatRoom({ convo, onBack }: Props) {
           <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
           <button 
             onClick={() => fileInputRef.current?.click()}
+            disabled={isDeletedConversation}
             className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors flex-shrink-0"
           >
             <ImageIcon className="w-4 h-4 text-white/60"/>
@@ -578,22 +595,29 @@ export default function ChatRoom({ convo, onBack }: Props) {
             vanishMode 
               ? 'bg-pink-500/5 border-pink-500/30 focus-within:border-pink-500/60 shadow-[0_0_0_1px_rgba(236,72,153,0.2)]' 
               : 'bg-white/5 border-white/10 focus-within:border-violet-500/50'
-          }`}>
+          } ${isDeletedConversation ? 'opacity-50' : ''}`}>
             <input
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder={vanishMode ? t('chat.vanishPlaceholder', '閱後即焚（10 秒）…') : t('chat.placeholder', '輸入訊息…')}
+              disabled={isDeletedConversation}
+              placeholder={
+                isDeletedConversation
+                  ? t('chat.deletedUserHint', '此帳號已刪除，無法再傳送訊息。')
+                  : vanishMode
+                    ? t('chat.vanishPlaceholder', '閱後即焚（10 秒）…')
+                    : t('chat.placeholder', '輸入訊息…')
+              }
               className={`flex-1 bg-transparent text-[13px] py-2 outline-none transition-colors ${
                 vanishMode ? 'text-pink-100 placeholder-pink-500/50' : 'text-white placeholder-white/30'
-              }`}
+              } ${isDeletedConversation ? 'cursor-not-allowed' : ''}`}
             />
           </div>
           
           <button
             onClick={sendMessage}
-            disabled={!input.trim()}
+            disabled={isDeletedConversation || !input.trim()}
             className={`w-9 h-9 rounded-full disabled:opacity-50 disabled:bg-slate-700 flex items-center justify-center flex-shrink-0 transition-all shadow-lg disabled:shadow-none ${
               vanishMode 
                 ? 'bg-pink-600 hover:bg-pink-500 shadow-pink-500/30' 

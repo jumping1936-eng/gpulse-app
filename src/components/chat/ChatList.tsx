@@ -135,12 +135,11 @@ export default function ChatList({ onOpenConvo }: Props) {
           const otherUser = isUser1 ? (convo.user2 as Record<string, unknown>) : (convo.user1 as Record<string, unknown>);
 
           const otherUserId = typeof otherUser?.id === 'string' ? otherUser.id : null;
-          if (!otherUserId) return null;
-          if (blockedUsers.has(otherUserId)) return null;
+          const isDeletedConversation = otherUserId === null;
+          if (!isDeletedConversation && blockedUsers.has(otherUserId)) return null;
 
           const conversationId = String(convo.id);
           const previewMessage = newestVisibleMessageByConversation.get(conversationId);
-
           return {
             id: conversationId,
             created_at: typeof convo.created_at === 'string' ? convo.created_at : undefined,
@@ -148,7 +147,7 @@ export default function ChatList({ onOpenConvo }: Props) {
             user2_id: typeof convo.user2_id === 'string' ? convo.user2_id : undefined,
             last_message: previewMessage ? formatPreview(previewMessage, t) : undefined,
             last_message_time: previewMessage?.created_at,
-            other_user: otherUser as unknown as DBProfile,
+            other_user: (otherUser as DBProfile | null) ?? null,
             unread: unreadByConversation.get(conversationId) ?? 0,
           };
         })
@@ -207,7 +206,7 @@ export default function ChatList({ onOpenConvo }: Props) {
 
   const recentMatches = conversations.slice(0, 8).map((convo) => ({
     id: convo.id,
-    name: convo.other_user?.full_name || t('common.unknownName', '尚未設定名稱'),
+    name: convo.other_user?.full_name || t('chat.deletedUser', '已刪除帳號'),
     avatar: convo.other_user?.avatar_url || '',
   }));
 
@@ -295,7 +294,7 @@ export default function ChatList({ onOpenConvo }: Props) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span className="font-semibold text-white text-base truncate">
-                        {convo.other_user?.full_name || t('common.unknownName', '尚未設定名稱')}
+                        {convo.other_user?.full_name || t('chat.deletedUser', '已刪除帳號')}
                       </span>
                       {formatMessageTime(convo.last_message_time) && <span className="text-white/35 text-[11px] flex-shrink-0">
                         {formatMessageTime(convo.last_message_time)}
