@@ -1,17 +1,39 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+type Operation = {
+  operation_key: string;
+  subject_user_id: string;
+  status: 'pending' | 'running' | 'auth_deleted_unverified' | 'failed' | 'completed';
+  phase: 'pending' | 'storage_cleanup' | 'database_cleanup' | 'auth_deletion' | 'verification' | 'complete';
+  retryable: boolean;
+};
+
 const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json' },
 });
 
+const publicStatus = (operation: Operation) => {
+  if (operation.status === 'completed') return 'complete';
+  if (operation.status === 'auth_deleted_unverified') return 'verification_pending';
+  if (operation.status === 'failed') return 'failed';
+  return 'processing';
+};
+
+const operationResponse = (operation: Operation, idempotent = false) => json({
+  ok: operation.status === 'completed',
+  status: publicStatus(operation),
+  idempotent,
+}, operation.status === 'completed' ? 200 : 409);
+
 const markOperation = async (
   adminClient: ReturnType<typeof createClient>,
   operationKey: string,
   userId: string,
-  status: string,
-  phase: string,
-  failureCode?: string,
+  status: Operation['status'],
+  phase: Operation['phase'],
+  retryable: boolean,
+  failureCode: string | null,
 ) => {
   const { error } = await adminClient
     .schema('private')
@@ -19,7 +41,8 @@ const markOperation = async (
     .update({
       status,
       phase,
-      failure_code: failureCode ?? null,
+      retryable,
+      failure_code: failureCode,
       updated_at: new Date().toISOString(),
       completed_at: status === 'completed' ? new Date().toISOString() : null,
     })
@@ -60,8 +83,6 @@ const removeOwnedPrefix = async (
   };
 
   await visit(prefix);
-  if (paths.length === 0) return;
-
   for (let index = 0; index < paths.length; index += 100) {
     const { error: removeError } = await adminClient.storage
       .from(bucket)
@@ -70,16 +91,88 @@ const removeOwnedPrefix = async (
   }
 };
 
+const removeAllOwnedStorage = async (adminClient: ReturnType<typeof createClient>, userId: string) => {
+  await removeOwnedPrefix(adminClient, 'avatars', userId);
+  await removeOwnedPrefix(adminClient, 'private-album', userId);
+};
+
+const readOperation = async (
+  adminClient: ReturnType<typeof createClient>,
+  operationKey: string,
+  userId?: string,
+) => {
+  let query = adminClient
+    .schema('private')
+    .from('account_deletion_operations')
+    .select('operation_key, subject_user_id, status, phase, retryable')
+    .eq('operation_key', operationKey);
+  if (userId) query = query.eq('subject_user_id', userId);
+  return query.maybeSingle();
+};
+
+const reconcilePostAuthDeletion = async (
+  adminClient: ReturnType<typeof createClient>,
+  operation: Operation,
+  projectUrl: string,
+  adminKey: string,
+) => {
+  const authUrl = `${projectUrl.replace(/\/$/, '')}/auth/v1/admin/users/${encodeURIComponent(operation.subject_user_id)}`;
+  const verificationResponse = await fetch(authUrl, {
+    headers: { Authorization: `Bearer ${adminKey}`, apikey: adminKey },
+  });
+  if (verificationResponse.status !== 404) {
+    return operationResponse({ ...operation, status: 'auth_deleted_unverified', phase: 'verification' }, true);
+  }
+
+  try {
+    await removeAllOwnedStorage(adminClient, operation.subject_user_id);
+  } catch {
+    return operationResponse({ ...operation, status: 'auth_deleted_unverified', phase: 'verification' }, true);
+  }
+
+  const ledgerError = await markOperation(
+    adminClient,
+    operation.operation_key,
+    operation.subject_user_id,
+    'completed',
+    'complete',
+    false,
+    null,
+  );
+  if (ledgerError) {
+    return operationResponse({ ...operation, status: 'auth_deleted_unverified', phase: 'verification' }, true);
+  }
+
+  return json({ ok: true, status: 'complete', idempotent: true });
+};
+
 Deno.serve(async (req) => {
   const authorization = req.headers.get('authorization');
+  const operationKey = req.headers.get('idempotency-key');
+  const reconciliationKey = req.headers.get('x-deletion-reconciliation-key');
   const projectUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const adminKey = Deno.env.get('SUPABASE_ADMIN_KEY');
-  const operationKey = req.headers.get('idempotency-key');
+  const trustedReconciliationKey = Deno.env.get('SUPABASE_DELETION_RECONCILIATION_KEY');
 
-  if (!authorization || !projectUrl || !anonKey || !adminKey || !operationKey) {
-    return json({ ok: false, error: 'Authenticated deletion and idempotency inputs are required.' }, 401);
+  if (!operationKey || operationKey.length > 200 || !projectUrl || !anonKey || !adminKey) {
+    return json({ ok: false, status: 'failed' }, 401);
   }
+
+  const adminClient = createClient(projectUrl, adminKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const isReconciliation = Boolean(trustedReconciliationKey && reconciliationKey === trustedReconciliationKey);
+
+  if (isReconciliation) {
+    const { data: operation, error } = await readOperation(adminClient, operationKey);
+    if (error || !operation || operation.status !== 'auth_deleted_unverified') {
+      return json({ ok: false, status: 'failed' }, 404);
+    }
+    return reconcilePostAuthDeletion(adminClient, operation as Operation, projectUrl, adminKey);
+  }
+
+  if (!authorization) return json({ ok: false, status: 'failed' }, 401);
 
   const callerClient = createClient(projectUrl, anonKey, {
     global: { headers: { Authorization: authorization } },
@@ -87,97 +180,119 @@ Deno.serve(async (req) => {
   });
   const { data: userData, error: userError } = await callerClient.auth.getUser();
   const userId = userData.user?.id;
-  if (userError || !userId) return json({ ok: false, error: 'Authenticated user could not be verified.' }, 401);
+  if (userError || !userId) return json({ ok: false, status: 'failed' }, 401);
 
-  const adminClient = createClient(projectUrl, adminKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  const { data: existing, error: existingError } = await adminClient
-    .schema('private')
-    .from('account_deletion_operations')
-    .select('operation_key, status, failure_code')
-    .eq('operation_key', operationKey)
-    .eq('subject_user_id', userId)
-    .maybeSingle();
-  if (existingError) return json({ ok: false, error: 'Deletion ledger could not be read.' }, 500);
-  if (existing?.status === 'completed') return json({ ok: true, status: 'completed', idempotent: true });
-  if (existing?.status === 'running') return json({ ok: false, status: 'running', retryable: true }, 409);
-
-  const { error: operationError } = await adminClient
-    .schema('private')
-    .from('account_deletion_operations')
-    .insert({
-      operation_key: operationKey,
-      subject_user_id: userId,
-      status: 'running',
-      phase: 'storage_cleanup',
-      failure_code: null,
-      updated_at: new Date().toISOString(),
-    });
-  if (operationError) {
-    if (operationError.code !== '23505') return json({ ok: false, error: 'Deletion operation could not be started.' }, 500);
-    const { data: duplicate } = await adminClient
+  const { data: existing, error: existingError } = await readOperation(adminClient, operationKey, userId);
+  if (existingError) return json({ ok: false, status: 'failed' }, 500);
+  if (existing) {
+    const operation = existing as Operation;
+    if (operation.status === 'completed') return operationResponse(operation, true);
+    if (operation.status === 'auth_deleted_unverified') {
+      return operationResponse(operation, true);
+    }
+    if (operation.status === 'pending' || operation.status === 'running') {
+      return operationResponse(operation, true);
+    }
+    if (operation.status === 'failed' && operation.retryable) {
+      const { data: claimed, error: claimError } = await adminClient
+        .schema('private')
+        .from('account_deletion_operations')
+        .update({ status: 'running', retryable: true, failure_code: null, updated_at: new Date().toISOString() })
+        .eq('operation_key', operationKey)
+        .eq('subject_user_id', userId)
+        .eq('status', 'failed')
+        .eq('retryable', true)
+        .select('operation_key, subject_user_id, status, phase, retryable')
+        .maybeSingle();
+      if (claimError) return json({ ok: false, status: 'failed' }, 500);
+      if (!claimed) {
+        const { data: current } = await readOperation(adminClient, operationKey, userId);
+        return current ? operationResponse(current as Operation, true) : json({ ok: false, status: 'failed' }, 500);
+      }
+    } else {
+      return operationResponse(operation, true);
+    }
+  } else {
+    const { data: active, error: activeError } = await adminClient
       .schema('private')
       .from('account_deletion_operations')
-      .select('status')
-      .eq('operation_key', operationKey)
+      .select('operation_key, subject_user_id, status, phase, retryable')
       .eq('subject_user_id', userId)
+      .in('status', ['pending', 'running', 'auth_deleted_unverified'])
+      .limit(1)
       .maybeSingle();
-    if (duplicate?.status === 'completed') return json({ ok: true, status: 'completed', idempotent: true });
-    return json({ ok: false, status: duplicate?.status ?? 'running', retryable: true }, 409);
+    if (activeError) return json({ ok: false, status: 'failed' }, 500);
+    if (active) return operationResponse(active as Operation, true);
+
+    const { error: insertError } = await adminClient
+      .schema('private')
+      .from('account_deletion_operations')
+      .insert({
+        operation_key: operationKey,
+        subject_user_id: userId,
+        status: 'running',
+        phase: 'storage_cleanup',
+        retryable: true,
+        failure_code: null,
+        updated_at: new Date().toISOString(),
+      });
+    if (insertError) {
+      const { data: current } = await readOperation(adminClient, operationKey, userId);
+      return current ? operationResponse(current as Operation, true) : json({ ok: false, status: 'processing' }, 409);
+    }
   }
+
+  const { data: operation, error: operationReadError } = await readOperation(adminClient, operationKey, userId);
+  if (operationReadError || !operation) return json({ ok: false, status: 'failed' }, 500);
+  const currentOperation = operation as Operation;
+  let authDeleted = currentOperation.status === 'auth_deleted_unverified';
+  let phase = currentOperation.phase;
 
   try {
-    await removeOwnedPrefix(adminClient, 'avatars', userId);
-    await removeOwnedPrefix(adminClient, 'private-album', userId);
+    if (phase === 'storage_cleanup' || phase === 'pending') {
+      await removeAllOwnedStorage(adminClient, userId);
+      phase = 'database_cleanup';
+    }
 
-    const databasePhaseError = await markOperation(adminClient, operationKey, userId, 'running', 'database_cleanup');
-    if (databasePhaseError) throw databasePhaseError;
-    const { error: firstParticipantError } = await adminClient
-      .from('conversations')
-      .update({ user1_id: null })
-      .eq('user1_id', userId);
-    if (firstParticipantError) throw firstParticipantError;
+    if (phase === 'database_cleanup') {
+      const phaseError = await markOperation(adminClient, operationKey, userId, 'running', phase, true, null);
+      if (phaseError) throw new Error('ledger_update_failed');
+      const { error: firstParticipantError } = await adminClient.from('conversations').update({ user1_id: null }).eq('user1_id', userId);
+      if (firstParticipantError) throw new Error('database_cleanup_failed');
+      const { error: secondParticipantError } = await adminClient.from('conversations').update({ user2_id: null }).eq('user2_id', userId);
+      if (secondParticipantError) throw new Error('database_cleanup_failed');
+      const { error: senderError } = await adminClient.from('messages').update({ sender_id: null }).eq('sender_id', userId);
+      if (senderError) throw new Error('database_cleanup_failed');
+      phase = 'auth_deletion';
+    }
 
-    const { error: secondParticipantError } = await adminClient
-      .from('conversations')
-      .update({ user2_id: null })
-      .eq('user2_id', userId);
-    if (secondParticipantError) throw secondParticipantError;
+    if (phase === 'auth_deletion') {
+      const phaseError = await markOperation(adminClient, operationKey, userId, 'running', phase, true, null);
+      if (phaseError) throw new Error('ledger_update_failed');
+      const authUrl = `${projectUrl.replace(/\/$/, '')}/auth/v1/admin/users/${encodeURIComponent(userId)}`;
+      const authResponse = await fetch(authUrl, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminKey}`, apikey: adminKey, 'content-type': 'application/json' },
+      });
+      if (!authResponse.ok && authResponse.status !== 404) throw new Error('auth_deletion_failed');
+      authDeleted = true;
+      const stateError = await markOperation(adminClient, operationKey, userId, 'auth_deleted_unverified', 'verification', true, null);
+      if (stateError) return json({ ok: false, status: 'verification_pending' }, 502);
+    }
 
-    const { error: senderError } = await adminClient
-      .from('messages')
-      .update({ sender_id: null })
-      .eq('sender_id', userId);
-    if (senderError) throw senderError;
-
-    const authPhaseError = await markOperation(adminClient, operationKey, userId, 'running', 'auth_deletion');
-    if (authPhaseError) throw authPhaseError;
-    const authUrl = `${projectUrl.replace(/\/$/, '')}/auth/v1/admin/users/${encodeURIComponent(userId)}`;
-    const authResponse = await fetch(authUrl, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${adminKey}`,
-        apikey: adminKey,
-        'content-type': 'application/json',
-      },
-    });
-    if (!authResponse.ok) throw new Error(`auth_delete_failed:${authResponse.status}`);
-
-    const verificationPhaseError = await markOperation(adminClient, operationKey, userId, 'running', 'verification');
-    if (verificationPhaseError) throw verificationPhaseError;
-    const verificationResponse = await fetch(authUrl, {
-      headers: { Authorization: `Bearer ${adminKey}`, apikey: adminKey },
-    });
-    if (verificationResponse.status !== 404) throw new Error(`auth_verification_failed:${verificationResponse.status}`);
-
-    const ledgerError = await markOperation(adminClient, operationKey, userId, 'completed', 'complete');
-    if (ledgerError) return json({ ok: false, status: 'partial', error: 'Account deleted but operation finalization failed.' }, 502);
-    return json({ ok: true, status: 'completed' });
-  } catch (error) {
-    const failureCode = error instanceof Error ? error.message.slice(0, 160) : 'deletion_failed';
-    await markOperation(adminClient, operationKey, userId, 'failed', 'failed', failureCode);
-    return json({ ok: false, status: 'failed', retryable: true, error: 'Account deletion did not complete.', failureCode }, 502);
+    if (authDeleted) {
+      const { data: verificationOperation } = await readOperation(adminClient, operationKey, userId);
+      if (!verificationOperation) return json({ ok: false, status: 'verification_pending' }, 502);
+      return reconcilePostAuthDeletion(adminClient, verificationOperation as Operation, projectUrl, adminKey);
+    }
+  } catch {
+    if (authDeleted) {
+      await markOperation(adminClient, operationKey, userId, 'auth_deleted_unverified', 'verification', true, 'verification_pending');
+      return json({ ok: false, status: 'verification_pending' }, 502);
+    }
+    await markOperation(adminClient, operationKey, userId, 'failed', phase, true, phase === 'storage_cleanup' ? 'storage_cleanup_failed' : `${phase}_failed`);
+    return json({ ok: false, status: 'failed' }, 502);
   }
+
+  return json({ ok: false, status: 'processing' }, 409);
 });

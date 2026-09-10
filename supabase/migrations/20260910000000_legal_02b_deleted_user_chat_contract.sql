@@ -2,37 +2,12 @@ BEGIN;
 
 -- Retain historical threads after an Auth account is deleted. The existing
 -- participant/message policies remain the browser write boundary.
-DO $$
-DECLARE
-  constraint_name text;
-BEGIN
-  FOR constraint_name IN
-    SELECT con.conname
-    FROM pg_catalog.pg_constraint con
-    JOIN pg_catalog.pg_attribute att
-      ON att.attrelid = con.conrelid
-     AND att.attnum = ANY (con.conkey)
-    WHERE con.conrelid = 'public.conversations'::regclass
-      AND con.contype = 'f'
-      AND att.attname IN ('user1_id', 'user2_id')
-  LOOP
-    EXECUTE format('ALTER TABLE public.conversations DROP CONSTRAINT %I', constraint_name);
-  END LOOP;
+ALTER TABLE public.conversations
+  DROP CONSTRAINT conversations_user1_id_fkey,
+  DROP CONSTRAINT conversations_user2_id_fkey;
 
-  FOR constraint_name IN
-    SELECT con.conname
-    FROM pg_catalog.pg_constraint con
-    JOIN pg_catalog.pg_attribute att
-      ON att.attrelid = con.conrelid
-     AND att.attnum = ANY (con.conkey)
-    WHERE con.conrelid = 'public.messages'::regclass
-      AND con.contype = 'f'
-      AND att.attname IN ('sender_id', 'conversation_id')
-  LOOP
-    EXECUTE format('ALTER TABLE public.messages DROP CONSTRAINT %I', constraint_name);
-  END LOOP;
-END;
-$$;
+ALTER TABLE public.messages
+  DROP CONSTRAINT messages_sender_id_fkey;
 
 ALTER TABLE public.conversations
   ALTER COLUMN user1_id DROP NOT NULL,
@@ -141,6 +116,44 @@ ON public.messages
 FOR EACH ROW
 EXECUTE FUNCTION public.prevent_deleted_user_message_writes();
 
+CREATE OR REPLACE FUNCTION public.mark_messages_read(message_ids uuid[])
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  updated_count integer;
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication is required' USING ERRCODE = '28000';
+  END IF;
+
+  IF message_ids IS NULL OR cardinality(message_ids) = 0 THEN
+    RETURN 0;
+  END IF;
+
+  UPDATE public.messages m
+  SET is_read = true
+  WHERE m.id = ANY(message_ids)
+    AND m.is_read IS FALSE
+    AND m.sender_id IS DISTINCT FROM caller_id
+    AND EXISTS (
+      SELECT 1
+      FROM public.conversations c
+      WHERE c.id = m.conversation_id
+        AND (c.user1_id = caller_id OR c.user2_id = caller_id)
+    );
+
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.mark_messages_read(uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_messages_read(uuid[]) TO authenticated;
+
 -- Safety evidence deliberately stores source UUIDs without foreign keys to
 -- public conversations/messages, so ordinary account deletion cannot be
 -- blocked by evidence retention.
@@ -179,11 +192,22 @@ CREATE TABLE IF NOT EXISTS private.account_deletion_operations (
   subject_user_id uuid NOT NULL,
   status text NOT NULL DEFAULT 'pending',
   phase text NOT NULL DEFAULT 'pending',
+  retryable boolean NOT NULL DEFAULT true,
   failure_code text,
   started_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   completed_at timestamptz
 );
+
+ALTER TABLE private.account_deletion_operations
+  ADD CONSTRAINT account_deletion_operations_status_check
+  CHECK (status IN ('pending', 'running', 'auth_deleted_unverified', 'failed', 'completed')),
+  ADD CONSTRAINT account_deletion_operations_phase_check
+  CHECK (phase IN ('pending', 'storage_cleanup', 'database_cleanup', 'auth_deletion', 'verification', 'complete'));
+
+CREATE UNIQUE INDEX account_deletion_operations_one_active_per_user
+ON private.account_deletion_operations (subject_user_id)
+WHERE status IN ('pending', 'running', 'auth_deleted_unverified');
 
 ALTER TABLE private.safety_cases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE private.safety_evidence ENABLE ROW LEVEL SECURITY;
@@ -196,5 +220,12 @@ REVOKE ALL ON TABLE
   private.legal_holds,
   private.account_deletion_operations
 FROM anon, authenticated;
+
+REVOKE ALL PRIVILEGES ON TABLE
+  private.safety_cases,
+  private.safety_evidence,
+  private.legal_holds,
+  private.account_deletion_operations
+FROM PUBLIC;
 
 COMMIT;

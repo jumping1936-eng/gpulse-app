@@ -116,6 +116,10 @@ const legal02bMigrationPath = path.resolve('supabase', 'migrations', '2026091000
 const legal02bMigrationSource = fs.existsSync(legal02bMigrationPath) ? fs.readFileSync(legal02bMigrationPath, 'utf8') : '';
 const deletionBackendPath = path.resolve('supabase', 'functions', 'account-deletion', 'index.ts');
 const deletionBackendSource = fs.existsSync(deletionBackendPath) ? fs.readFileSync(deletionBackendPath, 'utf8') : '';
+const deletionBackendResponseLines = deletionBackendSource
+  .split('\n')
+  .filter((line) => line.includes('json('))
+  .join('\n');
 const faviconPath = path.resolve('public', 'gpulse-mark.svg');
 const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
   /useEffect\(\(\)\s*=>\s*\{([\s\S]*?)\},\s*\[[^\]]*\]\);/g,
@@ -160,6 +164,8 @@ checkTrue('Legal Center component exists', legalTermsSource.includes('Legal Cent
 checkEqual('Legal Center document definitions', [...legalDocumentsSource.matchAll(/id: '(?:terms|privacy|community|deletion)'/g)].length, 8);
 checkTrue('Legal publication placeholders are centralized', ['LEGAL_OPERATOR_NAME', 'LEGAL_OPERATOR_ADDRESS', 'LEGAL_SUPPORT_EMAIL', 'LEGAL_PRIVACY_EMAIL', 'LEGAL_EFFECTIVE_DATE', 'LEGAL_ACCOUNT_DELETION_URL'].every((name) => legalConfigSource.includes(name)));
 checkTrue('deleted-user chat contract migration exists', legal02bMigrationSource.length > 0);
+checkTrue('deleted-user chat migration uses exact FK drops', legal02bMigrationSource.includes('DROP CONSTRAINT conversations_user1_id_fkey') && legal02bMigrationSource.includes('DROP CONSTRAINT conversations_user2_id_fkey') && legal02bMigrationSource.includes('DROP CONSTRAINT messages_sender_id_fkey'));
+checkZero('deleted-user chat migration dynamic FK drops', [...legal02bMigrationSource.matchAll(/pg_catalog\.pg_constraint|FOR constraint_name|EXECUTE format\('ALTER TABLE public\.(?:conversations|messages) DROP CONSTRAINT/g)].length);
 checkTrue('deleted-user chat migration marks conversation participants nullable', /ALTER TABLE public\.conversations[\s\S]*ALTER COLUMN user1_id DROP NOT NULL[\s\S]*ALTER COLUMN user2_id DROP NOT NULL/.test(legal02bMigrationSource));
 checkTrue('deleted-user chat migration marks message sender nullable', /ALTER TABLE public\.messages[\s\S]*ALTER COLUMN sender_id DROP NOT NULL/.test(legal02bMigrationSource));
 checkEqual('deleted-user chat SET NULL foreign keys', [...legal02bMigrationSource.matchAll(/FOREIGN KEY \((?:user1_id|user2_id|sender_id)\)[\s\S]*?ON DELETE SET NULL/g)].length, 3);
@@ -172,8 +178,13 @@ checkTrue('safety cases foundation exists', /CREATE TABLE IF NOT EXISTS private\
 checkTrue('safety evidence foundation exists', /CREATE TABLE IF NOT EXISTS private\.safety_evidence/.test(legal02bMigrationSource));
 checkTrue('legal holds foundation exists', /CREATE TABLE IF NOT EXISTS private\.legal_holds/.test(legal02bMigrationSource));
 checkTrue('account deletion operation ledger exists', /CREATE TABLE IF NOT EXISTS private\.account_deletion_operations/.test(legal02bMigrationSource));
+checkTrue('one active deletion per user is database-enforced', /CREATE UNIQUE INDEX account_deletion_operations_one_active_per_user[\s\S]*WHERE status IN \('pending', 'running', 'auth_deleted_unverified'\)/.test(legal02bMigrationSource));
+checkTrue('deletion ledger status values are constrained', /account_deletion_operations_status_check[\s\S]*status IN \('pending', 'running', 'auth_deleted_unverified', 'failed', 'completed'\)/.test(legal02bMigrationSource));
+checkTrue('deletion ledger phase values are constrained', /account_deletion_operations_phase_check[\s\S]*phase IN \('pending', 'storage_cleanup', 'database_cleanup', 'auth_deletion', 'verification', 'complete'\)/.test(legal02bMigrationSource));
+checkTrue('deletion ledger retryability is explicit', /retryable boolean NOT NULL DEFAULT true/.test(legal02bMigrationSource));
 checkTrue('safety evidence has no destructive chat foreign key', !/private\.safety_evidence[\s\S]*REFERENCES public\.(?:messages|conversations)|ON DELETE RESTRICT/i.test(legal02bMigrationSource));
 checkTrue('safety tables deny direct browser access', /ALTER TABLE private\.(?:safety_cases|safety_evidence|legal_holds|account_deletion_operations) ENABLE ROW LEVEL SECURITY/.test(legal02bMigrationSource) && /REVOKE ALL ON TABLE[\s\S]*FROM anon, authenticated/.test(legal02bMigrationSource));
+checkTrue('safety tables revoke PUBLIC access', /REVOKE ALL PRIVILEGES ON TABLE[\s\S]*FROM PUBLIC/.test(legal02bMigrationSource));
 checkTrue('retention duration remains human-approved', !/(?:retention_days|retention_period|retention_duration)\s+(?:integer|interval|text)/i.test(legal02bMigrationSource));
 checkTrue('local deletion backend source exists', deletionBackendSource.length > 0);
 checkTrue('local deletion backend requires authenticated caller', /authorization/.test(deletionBackendSource) && /auth\.getUser\(\)/.test(deletionBackendSource));
@@ -183,8 +194,12 @@ checkTrue('local deletion backend uses server-only environment secret', /Deno\.e
 checkTrue('local deletion backend uses own storage prefixes', /const prefix = `\$\{userId\}\//.test(deletionBackendSource) && /removeOwnedPrefix\(adminClient, 'avatars', userId\)/.test(deletionBackendSource) && /removeOwnedPrefix\(adminClient, 'private-album', userId\)/.test(deletionBackendSource));
 checkTrue('local deletion backend uses operation ledger', /account_deletion_operations[\s\S]*insert/.test(deletionBackendSource) && /account_deletion_operations[\s\S]*maybeSingle/.test(deletionBackendSource));
 checkTrue('local deletion backend handles duplicate requests', /status === 'completed'[\s\S]*idempotent: true/.test(deletionBackendSource) && /status === 'running'[\s\S]*retryable: true/.test(deletionBackendSource));
-checkTrue('local deletion backend reports partial failure', /status: 'partial'/.test(deletionBackendSource));
-checkTrue('local deletion backend verifies Auth deletion', /markOperation\([\s\S]*'verification'/.test(deletionBackendSource) && /status !== 404/.test(deletionBackendSource));
+checkTrue('local deletion backend resumes same-key failed operations', /status === 'failed' && operation\.retryable[\s\S]*\.eq\('status', 'failed'\)[\s\S]*\.eq\('retryable', true\)/.test(deletionBackendSource));
+checkTrue('local deletion backend blocks different-key active operations', /\.in\('status', \['pending', 'running', 'auth_deleted_unverified'\]\)/.test(deletionBackendSource));
+checkTrue('local deletion backend reports partial failure', /status: 'verification_pending'/.test(deletionBackendSource));
+checkTrue('local deletion backend verifies Auth deletion', /auth_deleted_unverified/.test(deletionBackendSource) && /status !== 404/.test(deletionBackendSource));
+checkTrue('local deletion backend supports trusted post-auth reconciliation', /SUPABASE_DELETION_RECONCILIATION_KEY/.test(deletionBackendSource) && /x-deletion-reconciliation-key/.test(deletionBackendSource) && /verification_pending/.test(deletionBackendSource));
+checkTrue('local deletion backend does not expose internal failure details', !/failureCode|failure_code/.test(deletionBackendResponseLines));
 checkTrue('local deletion backend uses privileged Auth deletion', /auth\/v1\/admin\/users/.test(deletionBackendSource) && /Authorization: `Bearer \$\{adminKey\}`/.test(deletionBackendSource));
 checkZero('LEGAL-02B migration notification schema changes', [...legal02bMigrationSource.matchAll(/notifications/gi)].length);
 checkZero('LEGAL-02B migration conversation member deletion flags', [...legal02bMigrationSource.matchAll(/conversation_member_state|deleted_flag|is_deleted/gi)].length);
