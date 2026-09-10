@@ -12,6 +12,7 @@ import GPulseLogo from '@/components/brand/GPulseLogo';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { LanguageProvider } from '@/context/LanguageContext';
 import { useLanguage } from '@/context/LanguageContext';
+import type { LegalDocumentId } from '@/legal/legalDocuments';
 
 // ==========================================
 // 核心業務邏輯元件 (確保被 AuthProvider 包覆)
@@ -28,6 +29,14 @@ function AppContent() {
 
   const [appState, setAppState] = useState<AppState>('safety-check');
   const [isChecking, setIsChecking] = useState(true);
+  const [legalDocument, setLegalDocument] = useState<LegalDocumentId>('terms');
+  const [legalReturnState, setLegalReturnState] = useState<'login' | 'app'>('login');
+
+  const openLegal = (document: LegalDocumentId, returnState: 'login' | 'app') => {
+    setLegalDocument(document);
+    setLegalReturnState(returnState);
+    setAppState('legal');
+  };
 
   // 資料庫連線測試
   useEffect(() => {
@@ -91,7 +100,8 @@ function AppContent() {
       )}
       {(appState === 'login' || isPasswordRecovery) && (
         <LoginScreen
-          onLogin={() => setAppState('legal')}
+          onLogin={() => openLegal('terms', 'app')}
+          onOpenLegalDocument={(document) => openLegal(document, 'login')}
           isPasswordRecovery={isPasswordRecovery}
           onPasswordRecoveryComplete={() => {
             completePasswordRecovery();
@@ -100,7 +110,7 @@ function AppContent() {
         />
       )}
       {appState === 'legal' && (
-        <LegalTerms onAccept={() => setAppState('app')} />
+        <LegalTerms initialDocument={legalDocument} onClose={() => setAppState(legalReturnState)} />
       )}
       {appState === 'app' && !isPasswordRecovery && (
         <MainApp />

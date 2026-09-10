@@ -5,16 +5,19 @@ import { getLoginCopy } from '../i18n/loginTranslations';
 import { supabase } from '../supabaseClient'; 
 import { useLanguage } from '@/context/LanguageContext';
 import GPulseLogo from '@/components/brand/GPulseLogo';
+import type { LegalDocumentId } from '@/legal/legalDocuments';
 
 
 interface Props {
   onLogin: () => void;
+  onOpenLegalDocument?: (document: LegalDocumentId) => void;
   isPasswordRecovery?: boolean;
   onPasswordRecoveryComplete?: () => void;
 }
 
 export default function LoginScreen({
   onLogin,
+  onOpenLegalDocument,
   isPasswordRecovery = false,
   onPasswordRecoveryComplete,
 }: Props) {
@@ -304,6 +307,17 @@ export default function LoginScreen({
                 {appT('auth.googleSignIn', '使用 Google 帳號登入')}
               </button>
             </div>
+            <p className="mt-5 text-center text-xs leading-5 text-white/45">
+              {locale === 'zh-TW' ? '登入即表示您同意 ' : 'By signing in, you agree to the '}
+              <button type="button" onClick={() => onOpenLegalDocument?.('terms')} className="text-violet-300 underline underline-offset-2 hover:text-violet-200">
+                {locale === 'zh-TW' ? '服務條款' : 'Terms of Service'}
+              </button>
+              {locale === 'zh-TW' ? ' 與 ' : ' and '}
+              <button type="button" onClick={() => onOpenLegalDocument?.('privacy')} className="text-violet-300 underline underline-offset-2 hover:text-violet-200">
+                {locale === 'zh-TW' ? '隱私權政策' : 'Privacy Policy'}
+              </button>
+              {locale === 'zh-TW' ? '。' : '.'}
+            </p>
           </div>
         </div>
       </div>

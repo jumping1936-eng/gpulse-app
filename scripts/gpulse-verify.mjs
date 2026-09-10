@@ -106,6 +106,12 @@ const paywallModalSource = fs.readFileSync(path.join(sourceRoot, 'components', '
 const appSource = fs.readFileSync(path.join(sourceRoot, 'App.tsx'), 'utf8');
 const brandLogoPath = path.join(sourceRoot, 'components', 'brand', 'GPulseLogo.tsx');
 const brandLogoSource = fs.existsSync(brandLogoPath) ? fs.readFileSync(brandLogoPath, 'utf8') : '';
+const legalTermsPath = path.join(sourceRoot, 'components', 'LegalTerms.tsx');
+const legalTermsSource = fs.existsSync(legalTermsPath) ? fs.readFileSync(legalTermsPath, 'utf8') : '';
+const legalDocumentsPath = path.join(sourceRoot, 'legal', 'legalDocuments.ts');
+const legalDocumentsSource = fs.existsSync(legalDocumentsPath) ? fs.readFileSync(legalDocumentsPath, 'utf8') : '';
+const legalConfigPath = path.join(sourceRoot, 'legal', 'legalConfig.ts');
+const legalConfigSource = fs.existsSync(legalConfigPath) ? fs.readFileSync(legalConfigPath, 'utf8') : '';
 const faviconPath = path.resolve('public', 'gpulse-mark.svg');
 const automaticGeolocationEffectCount = [...profileViewSource.matchAll(
   /useEffect\(\(\)\s*=>\s*\{([\s\S]*?)\},\s*\[[^\]]*\]\);/g,
@@ -146,6 +152,12 @@ checkTrue('Login uses canonical GPulse brand component', loginScreenSource.inclu
 checkTrue('Splash no longer uses generic Activity as brand identity', !appSource.includes('Activity'));
 checkTrue('brand favicon is local', fs.existsSync(faviconPath));
 checkZero('external logo URL dependencies', countMatches(/(?:bolt\.new\/static\/og_default|vite\.svg)/gi));
+checkTrue('Legal Center component exists', legalTermsSource.includes('Legal Center') && legalTermsSource.includes('legal-document-title'));
+checkEqual('Legal Center document definitions', [...legalDocumentsSource.matchAll(/id: '(?:terms|privacy|community|deletion)'/g)].length, 8);
+checkTrue('Legal publication placeholders are centralized', ['LEGAL_OPERATOR_NAME', 'LEGAL_OPERATOR_ADDRESS', 'LEGAL_SUPPORT_EMAIL', 'LEGAL_PRIVACY_EMAIL', 'LEGAL_EFFECTIVE_DATE', 'LEGAL_ACCOUNT_DELETION_URL'].every((name) => legalConfigSource.includes(name)));
+checkTrue('auth flow can open Terms and Privacy', loginScreenSource.includes("onOpenLegalDocument?.('terms')") && loginScreenSource.includes("onOpenLegalDocument?.('privacy')"));
+checkTrue('authenticated Help exposes Legal Center', profileViewSource.includes('setIsLegalCenterOpen(true)') && profileViewSource.includes('<LegalTerms'));
+checkZero('Grindr branding or URL references', countMatches(/grindr/gi));
 checkTrue('secure Stories migration exists', storiesMigrationExists);
 checkGreaterOrEqual('Stories table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.stories/g)].length, 1);
 checkGreaterOrEqual('Story view table definition', [...storiesMigrationSource.matchAll(/CREATE TABLE private\.story_views/g)].length, 1);

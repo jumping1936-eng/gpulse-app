@@ -14,6 +14,7 @@ import { useLanguage } from '@/context/LanguageContext';
 // ✅ 總監新增：匯入 Supabase 客戶端，準備執行徹底登出
 import { supabase } from '@/supabaseClient'; 
 import PrivateAlbumRelationships from '@/components/profile/PrivateAlbumRelationships';
+import LegalTerms from '@/components/LegalTerms';
 import { getPublicProfileGallery, getPublicProfilePhoto, isValidProfileName, OWN_PROFILE_FIELDS } from '@/utils/profile';
 import {
   loadOwnerPrivatePhotos,
@@ -157,6 +158,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isLegalCenterOpen, setIsLegalCenterOpen] = useState(false);
   
   const [contactFormOpen, setContactFormOpen] = useState(false);
   const [contactMessage, setContactMessage] = useState('');
@@ -1260,9 +1262,20 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
                 ))}
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsLegalCenterOpen(true)}
+              className="w-full rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 py-4 text-left text-sm font-semibold text-violet-100 transition hover:bg-violet-500/20"
+            >
+              {t('legal.openCenter', '法律中心')}
+              <span className="mt-1 block text-xs font-normal text-violet-200/70">{t('legal.openCenterHint', '查看服務條款、隱私權政策、社群規範與帳號／資料刪除政策。')}</span>
+            </button>
           </div>
         </div>
       )}
+
+      {isLegalCenterOpen && <LegalTerms onClose={() => setIsLegalCenterOpen(false)} />}
 
       {/* ========================================== */}
       {/* 表單與客服 Modal (z-150) */}
