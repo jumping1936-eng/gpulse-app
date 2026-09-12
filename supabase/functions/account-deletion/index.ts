@@ -168,8 +168,8 @@ Deno.serve(async (req) => {
   const reconciliationKey = req.headers.get('x-deletion-reconciliation-key');
   const projectUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  const adminKey = Deno.env.get('SUPABASE_ADMIN_KEY');
-  const trustedReconciliationKey = Deno.env.get('SUPABASE_DELETION_RECONCILIATION_KEY');
+  const adminKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const trustedReconciliationKey = Deno.env.get('GPULSE_DELETION_RECONCILIATION_KEY');
 
   if (!operationKey || operationKey.length > 200 || !projectUrl || !anonKey || !adminKey) {
     return json({ ok: false, status: 'failed' }, 401);
