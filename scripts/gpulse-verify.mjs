@@ -114,6 +114,8 @@ const legalConfigPath = path.join(sourceRoot, 'legal', 'legalConfig.ts');
 const legalConfigSource = fs.existsSync(legalConfigPath) ? fs.readFileSync(legalConfigPath, 'utf8') : '';
 const legal02bMigrationPath = path.resolve('supabase', 'migrations', '20260910000000_legal_02b_deleted_user_chat_contract.sql');
 const legal02bMigrationSource = fs.existsSync(legal02bMigrationPath) ? fs.readFileSync(legal02bMigrationPath, 'utf8') : '';
+const legal02cMigrationPath = path.resolve('supabase', 'migrations', '20260912000000_legal_02c_fix_02_conversation_participant_immutability.sql');
+const legal02cMigrationSource = fs.existsSync(legal02cMigrationPath) ? fs.readFileSync(legal02cMigrationPath, 'utf8') : '';
 const deletionBackendPath = path.resolve('supabase', 'functions', 'account-deletion', 'index.ts');
 const deletionBackendSource = fs.existsSync(deletionBackendPath) ? fs.readFileSync(deletionBackendPath, 'utf8') : '';
 const deletionBackendResponseLines = deletionBackendSource
@@ -164,6 +166,23 @@ checkTrue('Legal Center component exists', legalTermsSource.includes('Legal Cent
 checkEqual('Legal Center document definitions', [...legalDocumentsSource.matchAll(/id: '(?:terms|privacy|community|deletion)'/g)].length, 8);
 checkTrue('Legal publication placeholders are centralized', ['LEGAL_OPERATOR_NAME', 'LEGAL_OPERATOR_ADDRESS', 'LEGAL_SUPPORT_EMAIL', 'LEGAL_PRIVACY_EMAIL', 'LEGAL_EFFECTIVE_DATE', 'LEGAL_ACCOUNT_DELETION_URL'].every((name) => legalConfigSource.includes(name)));
 checkTrue('deleted-user chat contract migration exists', legal02bMigrationSource.length > 0);
+checkTrue('conversation participant immutability migration exists', legal02cMigrationSource.length > 0);
+checkTrue(
+  'conversation table UPDATE privilege is revoked before column grants',
+  /REVOKE UPDATE ON TABLE public\.conversations FROM PUBLIC, anon, authenticated;/.test(legal02cMigrationSource),
+);
+checkTrue(
+  'authenticated conversation UPDATE is limited to preview columns',
+  /GRANT UPDATE \(last_message, last_message_time\)[\s\S]*ON TABLE public\.conversations[\s\S]*TO authenticated;/.test(legal02cMigrationSource),
+);
+checkFalse('authenticated participant UPDATE is not granted', /GRANT UPDATE \([^)]*\buser[12]_id\b/.test(legal02cMigrationSource));
+checkFalse('anon participant UPDATE is not granted', /GRANT UPDATE[\s\S]*TO anon/.test(legal02cMigrationSource));
+checkEqual('frontend direct conversation preview update paths', countMatches(/from\(\s*['"]conversations['"]\s*\)\.update\(/g), 2);
+checkTrue('frontend conversation preview updates use only approved columns', [...chatRoomSource.matchAll(/from\(\s*['"]conversations['"]\s*\)\.update\(\s*\{([\s\S]*?)\}\)/g)].every((match) => {
+  const updatedColumns = [...match[1].matchAll(/\b([a-z_]+)\s*:/g)].map((column) => column[1]);
+  return updatedColumns.length > 0 && updatedColumns.every((column) => ['last_message', 'last_message_time'].includes(column));
+}));
+checkTrue('trusted account deletion path still clears participants', /adminClient\.from\('conversations'\)\.update\(\{ user1_id: null \}\)/.test(deletionBackendSource) && /adminClient\.from\('conversations'\)\.update\(\{ user2_id: null \}\)/.test(deletionBackendSource));
 checkTrue('deleted-user chat migration uses exact FK drops', legal02bMigrationSource.includes('DROP CONSTRAINT conversations_user1_id_fkey') && legal02bMigrationSource.includes('DROP CONSTRAINT conversations_user2_id_fkey') && legal02bMigrationSource.includes('DROP CONSTRAINT messages_sender_id_fkey'));
 checkZero('deleted-user chat migration dynamic FK drops', [...legal02bMigrationSource.matchAll(/pg_catalog\.pg_constraint|FOR constraint_name|EXECUTE format\('ALTER TABLE public\.(?:conversations|messages) DROP CONSTRAINT/g)].length);
 checkTrue('deleted-user chat migration marks conversation participants nullable', /ALTER TABLE public\.conversations[\s\S]*ALTER COLUMN user1_id DROP NOT NULL[\s\S]*ALTER COLUMN user2_id DROP NOT NULL/.test(legal02bMigrationSource));
