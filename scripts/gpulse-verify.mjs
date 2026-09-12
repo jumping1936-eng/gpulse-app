@@ -116,6 +116,8 @@ const legal02bMigrationPath = path.resolve('supabase', 'migrations', '2026091000
 const legal02bMigrationSource = fs.existsSync(legal02bMigrationPath) ? fs.readFileSync(legal02bMigrationPath, 'utf8') : '';
 const legal02cMigrationPath = path.resolve('supabase', 'migrations', '20260912000000_legal_02c_fix_02_conversation_participant_immutability.sql');
 const legal02cMigrationSource = fs.existsSync(legal02cMigrationPath) ? fs.readFileSync(legal02cMigrationPath, 'utf8') : '';
+const legal02cFix03MigrationPath = path.resolve('supabase', 'migrations', '20260912010000_legal_02c_fix_03_retained_room_read_only.sql');
+const legal02cFix03MigrationSource = fs.existsSync(legal02cFix03MigrationPath) ? fs.readFileSync(legal02cFix03MigrationPath, 'utf8') : '';
 const deletionBackendPath = path.resolve('supabase', 'functions', 'account-deletion', 'index.ts');
 const deletionBackendSource = fs.existsSync(deletionBackendPath) ? fs.readFileSync(deletionBackendPath, 'utf8') : '';
 const deletionBackendResponseLines = deletionBackendSource
@@ -167,6 +169,25 @@ checkEqual('Legal Center document definitions', [...legalDocumentsSource.matchAl
 checkTrue('Legal publication placeholders are centralized', ['LEGAL_OPERATOR_NAME', 'LEGAL_OPERATOR_ADDRESS', 'LEGAL_SUPPORT_EMAIL', 'LEGAL_PRIVACY_EMAIL', 'LEGAL_EFFECTIVE_DATE', 'LEGAL_ACCOUNT_DELETION_URL'].every((name) => legalConfigSource.includes(name)));
 checkTrue('deleted-user chat contract migration exists', legal02bMigrationSource.length > 0);
 checkTrue('conversation participant immutability migration exists', legal02cMigrationSource.length > 0);
+checkTrue('retained conversation read-only migration exists', legal02cFix03MigrationSource.length > 0);
+checkTrue(
+  'retained conversation UPDATE uses a restrictive live-room policy',
+  /CREATE POLICY conversations_live_update_only[\s\S]*ON public\.conversations[\s\S]*AS RESTRICTIVE[\s\S]*FOR UPDATE[\s\S]*TO authenticated/.test(legal02cFix03MigrationSource),
+);
+checkTrue(
+  'retained conversation UPDATE is denied when either participant is NULL',
+  /conversations_live_update_only[\s\S]*USING \([\s\S]*user1_id IS NOT NULL[\s\S]*user2_id IS NOT NULL[\s\S]*auth\.uid\(\) = user1_id OR auth\.uid\(\) = user2_id[\s\S]*\)[\s\S]*WITH CHECK \([\s\S]*user1_id IS NOT NULL[\s\S]*user2_id IS NOT NULL/.test(legal02cFix03MigrationSource),
+);
+checkTrue(
+  'live conversation preview UPDATE remains granted',
+  /GRANT UPDATE \(last_message, last_message_time\)[\s\S]*TO authenticated;/.test(legal02cMigrationSource)
+    && [...chatRoomSource.matchAll(/from\(\s*['"]conversations['"]\s*\)\.update\(\s*\{([\s\S]*?)\}\)/g)].length === 2,
+);
+checkTrue(
+  'participant IDs remain immutable to authenticated clients',
+  /REVOKE UPDATE ON TABLE public\.conversations FROM PUBLIC, anon, authenticated;/.test(legal02cMigrationSource)
+    && !/GRANT UPDATE \([^)]*\buser[12]_id\b/.test(legal02cMigrationSource),
+);
 checkTrue(
   'conversation table UPDATE privilege is revoked before column grants',
   /REVOKE UPDATE ON TABLE public\.conversations FROM PUBLIC, anon, authenticated;/.test(legal02cMigrationSource),
@@ -192,6 +213,7 @@ checkTrue('conversation deletion still cascades to messages', /FOREIGN KEY \(con
 checkTrue('retained conversation remains readable by survivor', /CREATE POLICY conversations_survivor_select[\s\S]*auth\.uid\(\) = user1_id OR auth\.uid\(\) = user2_id/.test(legal02bMigrationSource));
 checkTrue('retained conversation message inserts require two participants', /messages_insert_live_participants_only[\s\S]*c\.user1_id IS NOT NULL[\s\S]*c\.user2_id IS NOT NULL/.test(legal02bMigrationSource));
 checkTrue('message sender must equal auth.uid', /sender_id = auth\.uid\(\)[\s\S]*NEW\.sender_id IS DISTINCT FROM caller_id/.test(legal02bMigrationSource));
+checkTrue('mark_messages_read remains NULL-safe', /m\.sender_id IS DISTINCT FROM caller_id/.test(legal02bMigrationSource));
 checkTrue('symmetric block guard remains enforced', /private\.is_interaction_blocked\([\s\S]*CASE WHEN c\.user1_id = auth\.uid\(\)/.test(legal02bMigrationSource));
 checkTrue('safety cases foundation exists', /CREATE TABLE IF NOT EXISTS private\.safety_cases/.test(legal02bMigrationSource));
 checkTrue('safety evidence foundation exists', /CREATE TABLE IF NOT EXISTS private\.safety_evidence/.test(legal02bMigrationSource));
@@ -222,6 +244,8 @@ checkTrue('local deletion backend does not expose internal failure details', !/f
 checkTrue('local deletion backend uses privileged Auth deletion', /auth\/v1\/admin\/users/.test(deletionBackendSource) && /Authorization: `Bearer \$\{adminKey\}`/.test(deletionBackendSource));
 checkZero('LEGAL-02B migration notification schema changes', [...legal02bMigrationSource.matchAll(/notifications/gi)].length);
 checkZero('LEGAL-02B migration conversation member deletion flags', [...legal02bMigrationSource.matchAll(/conversation_member_state|deleted_flag|is_deleted/gi)].length);
+checkZero('LEGAL-02C-FIX-03 notification schema changes', [...legal02cFix03MigrationSource.matchAll(/notifications/gi)].length);
+checkZero('LEGAL-02C-FIX-03 conversation member deletion flags', [...legal02cFix03MigrationSource.matchAll(/conversation_member_state|deleted_flag|is_deleted/gi)].length);
 checkTrue('deleted-user chat strings are localized', appTranslationsSource.includes("'chat.deletedUser'") && appTranslationsSource.includes("'chat.deletedUserHint'"));
 checkTrue('deleted-user frontend does not fabricate profile identity', !/deleted:\$\{conversationId\}/.test(chatRoomSource) && !/deleted:\$\{conversationId\}/.test(fs.readFileSync(path.join(sourceRoot, 'components', 'chat', 'ChatList.tsx'), 'utf8')));
 checkTrue('deleted-user frontend disables composer', /disabled=\{isDeletedConversation\}/.test(chatRoomSource) && /isDeletedConversation \|\| !input\.trim\(\)/.test(chatRoomSource));
