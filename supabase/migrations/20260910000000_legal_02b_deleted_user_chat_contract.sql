@@ -24,9 +24,7 @@ ALTER TABLE public.conversations
 
 ALTER TABLE public.messages
   ADD CONSTRAINT messages_sender_id_fkey
-  FOREIGN KEY (sender_id) REFERENCES public.profiles(id) ON DELETE SET NULL,
-  ADD CONSTRAINT messages_conversation_id_fkey
-  FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE CASCADE;
+  FOREIGN KEY (sender_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 -- A surviving participant can still read a retained thread. No new
 -- conversation with a NULL participant can be written by a browser caller.
@@ -86,10 +84,6 @@ BEGIN
   FROM public.conversations c
   WHERE c.id = NEW.conversation_id;
 
-  IF TG_OP = 'UPDATE' AND NEW.sender_id IS NULL AND current_user = 'service_role' THEN
-    RETURN NEW;
-  END IF;
-
   IF participant_one IS NULL OR participant_two IS NULL THEN
     RAISE EXCEPTION 'Retained conversations are read-only';
   END IF;
@@ -111,7 +105,7 @@ $$;
 
 DROP TRIGGER IF EXISTS prevent_deleted_user_message_writes ON public.messages;
 CREATE TRIGGER prevent_deleted_user_message_writes
-BEFORE INSERT OR UPDATE OF sender_id, conversation_id
+BEFORE INSERT
 ON public.messages
 FOR EACH ROW
 EXECUTE FUNCTION public.prevent_deleted_user_message_writes();
