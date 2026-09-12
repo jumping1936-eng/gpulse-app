@@ -8,9 +8,15 @@ type Operation = {
   retryable: boolean;
 };
 
-const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify(body), {
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info, idempotency-key',
+};
+
+const json = (body: Record<string, unknown>, status = 200, responseHeaders: Record<string, string> = {}) => new Response(JSON.stringify(body), {
   status,
-  headers: { 'content-type': 'application/json' },
+  headers: { ...corsHeaders, 'content-type': 'application/json', ...responseHeaders },
 });
 
 const publicStatus = (operation: Operation) => {
@@ -147,6 +153,16 @@ const reconcilePostAuthDeletion = async (
 };
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: { ...corsHeaders, Allow: 'POST, OPTIONS' },
+    });
+  }
+  if (req.method !== 'POST') {
+    return json({ ok: false, status: 'method_not_allowed' }, 405, { Allow: 'POST' });
+  }
+
   const authorization = req.headers.get('authorization');
   const operationKey = req.headers.get('idempotency-key');
   const reconciliationKey = req.headers.get('x-deletion-reconciliation-key');
