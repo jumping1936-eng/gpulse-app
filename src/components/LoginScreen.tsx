@@ -166,6 +166,7 @@ export default function LoginScreen({
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '未知錯誤';
         setAuthError(`Google 登入發生錯誤：` + message);
+      } finally {
         setLoading(false);
         setLoadingProvider(null);
       }
@@ -301,7 +302,7 @@ export default function LoginScreen({
 
             <div className="grid grid-cols-1 gap-3">
               {/* 🎯 總監優化：全寬度 Google 登入按鈕 (已徹底拔除不支援的 LINE) */}
-              <button onClick={() => handleLogin('google')} disabled={loading || isOtpPending} className={`w-full bg-gradient-to-br from-red-500/20 to-yellow-500/10 border border-red-500/20 hover:border-red-400/40 backdrop-blur-xl rounded-xl py-3.5 flex items-center justify-center gap-3 text-white/80 text-sm font-medium transition-all disabled:opacity-40`}>
+              <button type="button" onClick={() => handleLogin('google')} disabled={loading || isOtpPending} className={`w-full bg-gradient-to-br from-red-500/20 to-yellow-500/10 border border-red-500/20 hover:border-red-400/40 backdrop-blur-xl rounded-xl py-3.5 flex items-center justify-center gap-3 text-white/80 text-sm font-medium transition-all disabled:opacity-40`}>
                 {loadingProvider === 'google' ? <Loader2 className="w-5 h-5 animate-spin" /> : <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">G</span>} 
                 {appT('auth.googleSignIn', '使用 Google 帳號登入')}
               </button>

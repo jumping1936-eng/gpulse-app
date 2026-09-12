@@ -366,6 +366,15 @@ checkTrue('onComplete runs only after successful persistence', /setIsEditModalOp
 checkTrue('OTP remains exactly 6 digits', loginScreenSource.includes('otpCode.length !== 6') && loginScreenSource.includes('maxLength={6}'));
 checkTrue('profile name validator remains 1-14 Han/English mixed', profileUtilitySource.includes('Script=Han') && profileUtilitySource.includes('1,14'));
 
+// ========== LOGIN BLOCKER REGRESSION CHECKS ==========
+checkTrue('Email login disabled only by local loading', loginScreenSource.includes('disabled={loading}') && !/disabled=\{[^}]*isAuthLoading[^}]*\}/.test(loginScreenSource));
+checkTrue('Google handler has finally clearing loading', /provider === 'google'[\s\S]{0,2000}finally[\s\S]{0,100}setLoading\(false\)/.test(loginScreenSource));
+checkTrue('Email handler has finally clearing loading', /provider === 'email'[\s\S]{0,2000}finally[\s\S]{0,100}setLoading\(false\)/.test(loginScreenSource));
+checkTrue('Google button has type=button', /<button\s+type="button"\s+onClick=\{[\s\S]*?handleLogin\('google'\)/.test(loginScreenSource));
+checkTrue('Email button disabled only by local loading', /disabled=\{loading\}/.test(loginScreenSource));
+checkTrue('Early return clears loading for empty credentials', /credentialsRequired[\s\S]{0,120}setLoading\(false\)/.test(loginScreenSource));
+checkTrue('no isAuthLoading shared in login button disabled', !/disabled=\{[^}]*isAuthLoading[^}]*\}/.test(loginScreenSource));
+
 for (const check of checks) {
   console.log(`${check.result ? 'PASS' : 'FAIL'} ${check.name}: ${check.actual} ${check.operator} ${check.expected}`);
 }
