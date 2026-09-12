@@ -5,6 +5,7 @@ import SafetyGuard from '@/components/SafetyGuard';
 import LoginScreen from '@/components/LoginScreen';
 import LegalTerms from '@/components/LegalTerms';
 import MainApp from '@/components/MainApp';
+import ProfileView from '@/components/profile/ProfileView';
 import { Loader2 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import GPulseLogo from '@/components/brand/GPulseLogo';
@@ -31,11 +32,22 @@ function AppContent() {
   const [isChecking, setIsChecking] = useState(true);
   const [legalDocument, setLegalDocument] = useState<LegalDocumentId>('terms');
   const [legalReturnState, setLegalReturnState] = useState<'login' | 'app'>('login');
+  const [consentKey, setConsentKey] = useState(0);
+  const [checkedUserId, setCheckedUserId] = useState<string | null>(null);
 
-  const openLegal = (document: LegalDocumentId, returnState: 'login' | 'app') => {
+  const openLegal = async (document: LegalDocumentId, returnState: 'login' | 'app') => {
     setLegalDocument(document);
     setLegalReturnState(returnState);
     setAppState('legal');
+  };
+
+  const acceptConsent = async () => {
+    const { error } = await supabase.auth.updateUser({ data: { legal_consent: true } });
+    if (error) {
+      console.error('Failed to record legal consent:', error);
+      return;
+    }
+    setConsentKey(k => k + 1);
   };
 
   // 資料庫連線測試
@@ -57,23 +69,64 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
-  // ✅ 3. 狀態機引擎：嚴格判斷「地理檢查」與「登入狀態」
-  useEffect(() => {
-    // 嚴格阻擋：如果正在檢查地理位置，或是 AuthContext 正在解析 Google Token，強制等待
-    if (isChecking || isAuthLoading) return;
+  // ✅ 3. 狀態機引擎：嚴格判斷「地理檢查」「Auth」「個人檔案」「法律同意」
+  const [authReady, setAuthReady] = useState(false);
+  const [userNeedsConsent, setUserNeedsConsent] = useState(false);
+  const [userNeedsProfile, setUserNeedsProfile] = useState(false);
 
+  useEffect(() => {
+    let isMounted = true;
+    const checkProfileAndConsent = async () => {
+      if (!user) { setAuthReady(true); setCheckedUserId(null); return; }
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!isMounted || !authUser) {
+          if (isMounted) { setAuthReady(true); setCheckedUserId(null); }
+          return;
+        }
+        if (isMounted) setCheckedUserId(authUser.id);
+        const consentGiven = authUser.user_metadata?.legal_consent === true;
+        if (isMounted) setUserNeedsConsent(!consentGiven);
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles').select('full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (!isMounted) return;
+        const incomplete = profileError || !profile || !profile.full_name || profile.full_name.trim() === '';
+        if (isMounted) setUserNeedsProfile(incomplete);
+      } catch {
+        if (isMounted) { setUserNeedsProfile(true); setCheckedUserId(null); }
+      }
+      if (isMounted) setAuthReady(true);
+    };
+    checkProfileAndConsent();
+    return () => { isMounted = false; };
+  }, [user, consentKey]);
+
+  useEffect(() => {
+    if (isChecking || isAuthLoading || !authReady) return;
     if (simulateBlocked) {
       setAppState('blocked');
     } else if (isPasswordRecovery) {
       setAppState('login');
     } else if (user) {
-      // 🌟 神奇魔法：如果偵測到使用者已登入，直接跳轉到 MainApp，略過 Login 與 Legal
-      setAppState('app'); 
+      if (checkedUserId !== user.id) {
+        setAppState('login');
+        return;
+      }
+      if (userNeedsConsent) {
+        setAppState('legal');
+        setLegalDocument('terms');
+        setLegalReturnState('app');
+      } else if (userNeedsProfile) {
+        setAppState('profile-setup');
+      } else {
+        setAppState('app');
+      }
     } else {
-      // 訪客或未登入，乖乖去登入畫面
       setAppState('login');
     }
-  }, [isChecking, isAuthLoading, user, simulateBlocked, isPasswordRecovery]);
+  }, [isChecking, isAuthLoading, authReady, user, simulateBlocked, isPasswordRecovery, userNeedsConsent, userNeedsProfile, checkedUserId]);
 
   // 畫面 1：雙重 Loading 狀態 (地理檢查 or 驗證身份解析中)
   if (isChecking || isAuthLoading) {
@@ -110,7 +163,17 @@ function AppContent() {
         />
       )}
       {appState === 'legal' && (
-        <LegalTerms initialDocument={legalDocument} onClose={() => setAppState(legalReturnState)} />
+        <LegalTerms
+          initialDocument={legalDocument}
+          onAccept={user && userNeedsConsent ? acceptConsent : undefined}
+          onClose={() => {
+            if (userNeedsConsent) return;
+            setAppState(legalReturnState);
+          }}
+        />
+      )}
+      {appState === 'profile-setup' && (
+        <ProfileView onComplete={() => setAppState('app')} />
       )}
       {appState === 'app' && !isPasswordRecovery && (
         <MainApp />

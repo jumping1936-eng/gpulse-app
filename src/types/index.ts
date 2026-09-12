@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { EntitlementStatus, TrialEligibility } from '@/utils/entitlement';
 
-export type AppState = 'safety-check' | 'blocked' | 'login' | 'legal' | 'app';
+export type AppState = 'safety-check' | 'blocked' | 'login' | 'legal' | 'profile-setup' | 'app';
 export type Tab = 'home' | 'explore' | 'chat' | 'inbox' | 'profile';
 export type TribeType = 'all' | 'bear' | 'wolf' | 'otter' | 'twink' | 'jock' | 'chat' | 'relationship';
 export type BlockListStatus = 'loading' | 'ready' | 'error' | 'unauthenticated';

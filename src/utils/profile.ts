@@ -1,6 +1,6 @@
 export const isValidProfileName = (value: string): boolean => {
   const name = value.trim();
-  return /^[\p{Script=Han}]{1,7}$/u.test(name) || /^[A-Za-z]{1,14}$/.test(name);
+  return /^[\p{Script=Han}A-Za-z]{1,14}$/u.test(name);
 };
 
 // Production-verified public.profiles columns used by public profile cards.

@@ -355,6 +355,17 @@ checkGreaterOrEqual('private album response RPC references', countMatches(/rpc\(
 checkGreaterOrEqual('private album revoke RPC references', countMatches(/rpc\(\s*['"]revoke_private_album_access['"]/g), 1);
 checkGreaterOrEqual('private album owner list RPC references', countMatches(/rpc\(\s*['"]list_own_private_album_relationships['"]/g), 1);
 
+// ========== FIX-08B REGRESSION CHECKS ==========
+checkFalse('openLegal contains no legal_consent write', /const openLegal = [\s\S]{0,200}?setAppState\('legal'\)[\s\S]{0,100}legal_consent/.test(appSource));
+checkTrue('explicit acceptConsent writes legal_consent=true', /acceptConsent[\s\S]{0,300}legal_consent:\s*true/.test(appSource));
+checkTrue('LegalTerms onAccept gated to missing-consent flow', appSource.includes('onAccept={user && userNeedsConsent ? acceptConsent : undefined}'));
+checkTrue('stale user check cannot authorize different user', appSource.includes('checkedUserId') && appSource.includes('checkedUserId !== user.id'));
+checkTrue('verification failure routes to login (fail closed)', appSource.includes("checkedUserId !== user.id") && appSource.includes("setAppState('login')"));
+checkTrue('incomplete profile routes to profile-setup', appSource.includes("setAppState('profile-setup')"));
+checkTrue('onComplete runs only after successful persistence', /setIsEditModalOpen\(false\)[\s\S]{0,80}onComplete\?\.\(\)/.test(profileViewSource));
+checkTrue('OTP remains exactly 6 digits', loginScreenSource.includes('otpCode.length !== 6') && loginScreenSource.includes('maxLength={6}'));
+checkTrue('profile name validator remains 1-14 Han/English mixed', profileUtilitySource.includes('Script=Han') && profileUtilitySource.includes('1,14'));
+
 for (const check of checks) {
   console.log(`${check.result ? 'PASS' : 'FAIL'} ${check.name}: ${check.actual} ${check.operator} ${check.expected}`);
 }

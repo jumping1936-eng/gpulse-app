@@ -75,9 +75,8 @@ export default function LoginScreen({
 
   // === OTP 驗證邏輯 (保留您的原版邏輯) ===
   async function handleVerifyOtp() {
-    if (!otpCode.trim() || otpCode.length !== 8) {
-      setAuthError(appT('auth.otpInvalid', '請輸入完整的 8 位數驗證碼。'));
-      return;
+    if (!otpCode.trim() || otpCode.length !== 6) {
+      setAuthError(appT('auth.otpInvalid', '請輸入完整的 6 位驗證碼。'));
     }
     setLoading(true);
     setLoadingProvider('otp');
@@ -275,10 +274,10 @@ export default function LoginScreen({
               <div className="mb-4 p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center flex flex-col gap-4">
                 <div>
                   <h3 className="text-emerald-400 font-bold mb-1 flex items-center justify-center gap-2"><KeyRound className="w-4 h-4" /> {appT('auth.otpTitle', '註冊驗證碼')}</h3>
-                  <p className="text-emerald-300/70 text-xs leading-relaxed">{appT('auth.otpHint', '我們已將 8 位數驗證碼寄至您的信箱。')}</p>
+                  <p className="text-emerald-300/70 text-xs leading-relaxed">{appT('auth.otpHint', '我們已將 6 位驗證碼寄至您的信箱。')}</p>
                 </div>
-                <input type="text" maxLength={8} value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))} onKeyDown={e => e.key === 'Enter' && otpCode.length === 8 && handleVerifyOtp()} placeholder="12345678" className="w-full bg-black/20 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-400 text-center text-xl tracking-[0.4em] font-mono focus:outline-none focus:border-emerald-400 transition-all" />
-                <button type="button" onClick={handleVerifyOtp} disabled={loading || otpCode.length !== 8} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl transition-colors font-bold tracking-wide text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+                <input type="text" maxLength={6} value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))} onKeyDown={e => e.key === 'Enter' && otpCode.length === 6 && handleVerifyOtp()} placeholder="123456" className="w-full bg-black/20 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-400 text-center text-xl tracking-[0.4em] font-mono focus:outline-none focus:border-emerald-400 transition-all" />
+                <button type="button" onClick={handleVerifyOtp} disabled={loading || otpCode.length !== 6} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl transition-colors font-bold tracking-wide text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                   {loadingProvider === 'otp' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MailCheck className="w-4 h-4" />}
                   {loadingProvider === 'otp' ? appT('auth.otpVerifying', '驗證中…') : appT('auth.otpConfirm', '確認驗證碼')}
                 </button>

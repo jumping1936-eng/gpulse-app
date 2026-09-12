@@ -40,6 +40,7 @@ const ToggleSwitch = ({ isOn, onToggle }: { isOn: boolean, onToggle: () => void 
 // ✅ 總監新增：定義 ProfileView 的 Props，接收來自 MainApp 的 onOpenBlockedUsers 事件
 interface ProfileViewProps {
   onOpenBlockedUsers?: () => void;
+  onComplete?: () => void;
 }
 
 type OwnLocationStatus = 'loading' | 'not-enabled' | 'fresh' | 'stale' | 'error';
@@ -594,7 +595,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
 
   async function handleSaveProfile() {
     if (!isValidProfileName(editForm.name)) {
-      return alert(t('profile.nameValidationError', '名稱僅能使用中文或英文；中文最多 7 字，英文最多 14 字，且不可包含空白或特殊符號。'));
+      return alert(t('profile.nameValidationError', '名稱長度為 1–14 字元，可使用中文或英文混合，不含數字、空白或特殊符號。'));
     }
     if (editForm.lookingFor.length === 0) return alert(t('profile.lookingForRequired', '請至少選擇一個尋找目標！'));
     if (editForm.role.length === 0) return alert(t('profile.roleRequired', '請至少選擇一個角色偏好！'));
@@ -616,6 +617,7 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
         return;
       }
       setIsEditModalOpen(false);
+      onComplete?.();
     } catch (error) {
       console.error('儲存個人檔案失敗:', error);
       setProfile(previousProfile);
@@ -961,8 +963,8 @@ export default function ProfileView({ onOpenBlockedUsers }: ProfileViewProps) {
               <div className="flex gap-4">
                 <div className="flex-2">
                   <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><User className="w-3.5 h-3.5" />{t('profile.name', '名稱')}</label>
-                  <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} maxLength={14} pattern="[A-Za-z\u4E00-\u9FFF]+" aria-invalid={Boolean(editForm.name) && !isValidProfileName(editForm.name)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none" />
-                  {editForm.name && !isValidProfileName(editForm.name) && <p className="mt-1 text-xs text-rose-400">{t('profile.nameRule', '僅限中文（最多 7 字）或英文（最多 14 字），不可混用空白或特殊符號。')}</p>}
+                  <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} maxLength={14} pattern="[\p{Script=Han}A-Za-z]+" aria-invalid={Boolean(editForm.name) && !isValidProfileName(editForm.name)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-violet-500 outline-none" />
+                  {editForm.name && !isValidProfileName(editForm.name) && <p className="mt-1 text-xs text-rose-400">{t('profile.nameRule', '長度 1–14 字元，中文與英文可混合，不可含數字、空白或特殊符號。')}</p>}
                 </div>
                 <div className="flex-1">
                   <label className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2"><Calendar className="w-3.5 h-3.5" />{t('profile.age', '年齡')}</label>
